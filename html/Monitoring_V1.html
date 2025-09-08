@@ -1,0 +1,188 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+	"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+
+<head>
+	<title>EBM Papst</title>
+	<meta http-equiv="content-type" content="text/html;charset=utf-8" />
+	<meta name="generator" content="Geany 1.38" />
+<style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f7fa;
+      color: #333;
+      margin: 0;
+      padding: 0;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      background: #004b8d; /* EBM Papst Blau */
+      color: white;
+      padding: 10px 20px;
+    }
+
+    header img {
+      height: 40px;
+      margin-right: 15px;
+    }
+
+    h1 {
+      font-size: 1.5em;
+      margin: 0;
+    }
+
+    .container {
+      max-width: 600px;
+      margin: 20px auto;
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    .title {
+      font-size: 1.1em;
+      margin: 8px 0;
+      text-align: center;
+    }
+
+    .measurement {
+      font-size: 1.1em;
+      margin: 8px 0;
+    }
+
+    .buttons {
+      margin-top: 20px;
+      display: flex;
+      gap: 10px;
+    }
+
+    button {
+      flex: 1;
+      padding: 10px;
+      font-size: 1em;
+      font-weight: bold;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      background: #004b8d;
+      color: white;
+      transition: background 0.3s;
+    }
+
+    button:hover {
+      background: #0073e6;
+    }
+
+    /* -------------------
+       ?? Responsive Teil
+       ------------------- */
+    @media (max-width: 600px) {
+      header {
+        flex-direction: column;
+        text-align: center;
+      }
+
+      header img {
+        margin: 0 0 10px 0;
+        height: 50px;
+      }
+
+      h1 {
+        font-size: 1.2em;
+      }
+
+      .container {
+        margin: 10px;
+        padding: 15px;
+      }
+
+      .measurement {
+        font-size: 1em;
+      }
+
+      .buttons {
+        flex-direction: column;
+      }
+
+      button {
+        width: 100%;
+        font-size: 1.1em;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <img src="ebmpapst_logo.png" alt="EBM Papst Logo">
+    <h1>Monitoring</h1>
+  </header>
+
+  <div class="container">
+    <div class="title">RaspberryPi</div>
+    <div class="measurement"><span id="ts"></span></div> 
+    <div class="measurement">CO2: <span id="co2"></span></div>
+    <div class="measurement">Temperatur: <span id="t"></span></div>
+    <div class="measurement">Luftfeuchte: <span id="h"></span></div>
+    <div class="measurement">Druck: <span id="p"></span></div>
+  </div>
+  
+  <div class="container">
+    <div class="title"><span id="device1"></span></div>
+    <div class="measurement">Temperatur Innen: <span id="tempinnen1"></span></div>
+    <div class="measurement">Feuchte Innen: <span id="huminnen1"></span></div>
+    <div class="measurement">Temperatur Aussen: <span id="tempaussen1"></span></div>
+    <div class="measurement">Feuchte Aussen: <span id="humaussen1"></span></div>
+    <div class="measurement">Drehzahl: <span id="drehzahl1"></span></div>
+    <div class="measurement">Periode: <span id="periode1"></span></div>
+  </div>
+  
+  <div class="container">
+    <div class="buttons">
+	<button onclick="send('/btn1')">Button 1</button>
+	<button onclick="send('/btn2')">Button 2</button></div>
+  </div>
+	
+	<script>
+	let startTime = Date.now();          // Startzeit merken
+
+	const API = `http://${window.location.hostname}:8000`;
+
+	function send(path){
+	    fetch(`${API}${path}`, { method: 'GET' })
+	      .then(r => {
+		if(!r.ok) throw new Error(`HTTP ${r.status}`);
+		return r.text();
+	      })
+	      .then(txt => document.getElementById('antwort').innerText = txt)
+	      .catch(err => document.getElementById('antwort').innerText = 'Fehler: ' + err);
+	  }
+
+	async function refresh(){
+	    const r = await fetch('/latest.json?'+Date.now());
+	    const j = await r.json();
+	    
+	    // Messwerte anzeigen
+	    document.getElementById('ts').textContent = j.ts;
+	    document.getElementById('co2').textContent = j.co2.toFixed(2) + " ppm";
+	    document.getElementById('t').textContent   = j.t.toFixed(1) + " C";
+	    document.getElementById('h').textContent   = j.h.toFixed(1) + " %";
+	    document.getElementById('p').textContent   = j.p.toFixed(2) + " hPa";
+	    
+	    document.getElementById('tempinnen1').textContent   = j.tempinnen1 + " C";
+	    document.getElementById('huminnen1').textContent   = j.huminnen1 + " %";
+	    document.getElementById('tempaussen1').textContent   = j.tempaussen1 + " C";
+	    document.getElementById('humaussen1').textContent   = j.humaussen1 + " %";
+	    document.getElementById('drehzahl1').textContent   = j.drehzahl1 + " U/min";
+	    document.getElementById('periode1').textContent   = j.periode1 + " %";
+	    document.getElementById('device1').textContent   = j.device1;
+	}
+
+	setInterval(refresh, 5000); 
+	refresh();
+	</script>
+</body>
+</html>

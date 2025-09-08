@@ -1,0 +1,136 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+	"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+
+<head>
+	<title>EBM PAPST MONITORING</title>
+	<meta http-equiv="content-type" content="text/html;charset=utf-8" />
+	<meta name="generator" content="Geany 1.38" />
+	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
+<style>
+   
+.self {
+   max-width: auto;
+   margin: 20px auto;
+   background: white;
+   padding: 30px;
+   border-radius: 12px;
+   box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+</style>
+
+</head>
+
+<body>
+   <nav class="navbar" style="background-color: #004b8d;" data-bs-theme="dark">
+     <div class="container-fluid">
+       <a class="navbar-brand" href="#">EBM PAPST MONITORING</a>
+       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNavAltMarkup" aria-controls="navbarNavAltMarkup" aria-expanded="false" aria-label="Toggle navigation">
+	 <span class="navbar-toggler-icon"></span>
+       </button>
+       <div class="collapse navbar-collapse" id="navbarNavAltMarkup">
+	 <div class="navbar-nav">
+	   <a class="nav-link active" aria-current="page" href="#">Home</a>
+	   <a class="nav-link" href="/phpmyadmin">Datenbank</a>
+	   <a class="nav-link" href="#">Leer</a>
+	   </div>
+       </div>
+     </div>
+   </nav>
+
+  <div class="row row-cols-1 row-cols-md-3">
+    <div class="col">
+	 <div class="container self">
+	  <div class="title">RaspberryPi</div>
+	  <div class="measurement"><span id="ts"></span></div> 
+	  <div class="measurement">CO2: <span id="co2"></span></div>
+	  <div class="measurement">Temperatur: <span id="t"></span></div>
+	  <div class="measurement">Luftfeuchte: <span id="h"></span></div>
+	  <div class="measurement">Druck: <span id="p"></span></div>
+	 </div>
+      </div>
+      
+    <div class="col">
+       <div class="container self">
+	     <div class="title"><span id="device1"></span></div>
+	     <div class="measurement">Temperatur Innen: <span id="tempinnen1"></span></div>
+	     <div class="measurement">Feuchte Innen: <span id="huminnen1"></span></div>
+	     <div class="measurement">Temperatur Aussen: <span id="tempaussen1"></span></div>
+	     <div class="measurement">Feuchte Aussen: <span id="humaussen1"></span></div>
+	     <div class="measurement">Drehzahl: <span id="drehzahl1"></span></div>
+	     <div class="measurement">Periode: <span id="periode1"></span></div>
+       </div>
+      </div>
+    
+    <div class="col">
+       <div class="container self">
+	     <div class="title"><span id="device2"></span></div>
+	     <div class="measurement">Temperatur Innen: <span id="tempinnen2"></span></div>
+	     <div class="measurement">Feuchte Innen: <span id="huminnen2"></span></div>
+	     <div class="measurement">Temperatur Aussen: <span id="tempaussen2"></span></div>
+	     <div class="measurement">Feuchte Aussen: <span id="humaussen2"></span></div>
+	     <div class="measurement">Drehzahl: <span id="drehzahl2"></span></div>
+	     <div class="measurement">Periode: <span id="periode2"></span></div>
+       </div>
+      </div>
+      
+    <div class="col">
+      <div class="container self">
+	 <button onclick="send('/btn1')">Button 1</button>
+	 <button onclick="send('/btn2')">Button 2</button></div>
+       </div>
+    </div>
+  </div>
+
+</div>
+
+	<script>
+	let startTime = Date.now();          // Startzeit merken
+
+	const API = `http://${window.location.hostname}:8000`;
+
+	function send(path){
+	    fetch(`${API}${path}`, { method: 'GET' })
+	      .then(r => {
+		if(!r.ok) throw new Error(`HTTP ${r.status}`);
+		return r.text();
+	      })
+	      .then(txt => document.getElementById('antwort').innerText = txt)
+	      .catch(err => document.getElementById('antwort').innerText = 'Fehler: ' + err);
+	  }
+
+	async function refresh(){
+	    const r = await fetch('/latest.json?'+Date.now());
+	    const j = await r.json();
+	    
+	    // Messwerte anzeigen
+	    document.getElementById('ts').textContent = j.ts;
+	    document.getElementById('co2').textContent = j.co2.toFixed(2) + " ppm";
+	    document.getElementById('t').textContent   = j.t.toFixed(1) + " C";
+	    document.getElementById('h').textContent   = j.h.toFixed(1) + " %";
+	    document.getElementById('p').textContent   = j.p.toFixed(2) + " hPa";
+	    
+	    document.getElementById('tempinnen1').textContent   = j.tempinnen1 + " C";
+	    document.getElementById('huminnen1').textContent   = j.huminnen1 + " %";
+	    document.getElementById('tempaussen1').textContent   = j.tempaussen1 + " C";
+	    document.getElementById('humaussen1').textContent   = j.humaussen1 + " %";
+	    document.getElementById('drehzahl1').textContent   = j.drehzahl1 + " U/min";
+	    document.getElementById('periode1').textContent   = j.periode1 + " %";
+	    document.getElementById('device1').textContent   = j.device1;
+	    
+	    document.getElementById('tempinnen2').textContent   = j.tempinnen2 + " C";
+	    document.getElementById('huminnen2').textContent   = j.huminnen2 + " %";
+	    document.getElementById('tempaussen2').textContent   = j.tempaussen2 + " C";
+	    document.getElementById('humaussen2').textContent   = j.humaussen2 + " %";
+	    document.getElementById('drehzahl2').textContent   = j.drehzahl2 + " U/min";
+	    document.getElementById('periode2').textContent   = j.periode2 + " %";
+	    document.getElementById('device2').textContent   = j.device2;
+	}
+
+	setInterval(refresh, 5000); 
+	refresh();
+	</script>
+</body>
+</html>
