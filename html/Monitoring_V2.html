@@ -78,18 +78,29 @@
       
     <div class="col">
       <div class="container self">
-	 <button onclick="send('/btn1')">Button 1</button>
-	 <button onclick="send('/btn2')">Button 2</button></div>
-       </div>
+		<input type="text" id="msg" placeholder="Nachricht eingeben">
+		<button onclick="sendText()">Senden</button>
+	 	<button onclick="send('/btn1')">Button 1</button>
+	 	<button onclick="send('/btn2')">Button 2</button></div>
+      </div>
     </div>
   </div>
-
 </div>
 
 	<script>
 	let startTime = Date.now();          // Startzeit merken
 
 	const API = `http://${window.location.hostname}:8000`;
+	
+	async function sendText() {
+	const msg = document.getElementById('msg').value;
+	const res = await fetch(`http://${window.location.hostname}:8000/sendtext`, {
+		method: "POST",
+		headers: {"Content-Type": "application/x-www-form-urlencoded"},
+		body: `msg=${encodeURIComponent(msg)}`
+	});
+	alert(await res.text());
+	}
 
 	function send(path){
 	    fetch(`${API}${path}`, { method: 'GET' })
@@ -100,7 +111,7 @@
 	      .then(txt => document.getElementById('antwort').innerText = txt)
 	      .catch(err => document.getElementById('antwort').innerText = 'Fehler: ' + err);
 	  }
-
+	
 	async function refresh(){
 	    const r = await fetch('/latest.json?'+Date.now());
 	    const j = await r.json();

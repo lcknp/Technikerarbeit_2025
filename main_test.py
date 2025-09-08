@@ -23,11 +23,11 @@ import os
 
 #FLASK Imports
 
-from flask import Flask, render_template_string
+from flask import Flask, request
 import threading
 
 ##########################################################
-"""
+
 app = Flask(__name__)
 
 @app.after_request
@@ -49,12 +49,30 @@ def btn2():
     print("Button 2 gedrückt")
     return "Button 2 OK"
 
+# Text vom Client entgegennehmen (POST oder GET)
+@app.route("/sendtext", methods=["GET", "POST", "OPTIONS"])
+def sendtext():
+    if request.method == "OPTIONS":
+        return ("", 204)  # CORS Preflight
+
+    # akzeptiere form-POST, JSON-POST und GET-Query
+    msg = (
+        request.form.get("msg") or
+        (request.get_json(silent=True) or {}).get("msg") or
+        request.args.get("msg", "")
+    )
+
+    print("Text empfangen:", msg)   # <-- hier in deine Unterfunktion weitergeben
+    # my_sub_function(msg)
+
+    return f"Empfangen: {msg}"
+
 def start_flask():
     app.run(host="0.0.0.0", port=8000, debug=False, threaded=True)
 
 # Flask-Server im Hintergrund starten
 threading.Thread(target=start_flask, daemon=True).start()
-"""
+
 ##########################################################
 
 # ------------------------------
@@ -166,6 +184,7 @@ except KeyboardInterrupt:
 finally:
     try:
         bus.close()
+        hc05lib.stop_all()
     except Exception:
         pass
     print("Alles gestoppt.")

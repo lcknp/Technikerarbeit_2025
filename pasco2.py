@@ -9,7 +9,8 @@ def co2_prodID(i2c_adresse):
     PROD_ID = 0x00
     
     prod = bus.read_i2c_block_data(i2c_adresse, PROD_ID, 1)[0]
-    print(hex(prod))
+    PROD_ID = prod
+    print(f"Prod_ID:{hex(PROD_ID)}")
 
 
 def co2_init(i2c_adresse, sec):
