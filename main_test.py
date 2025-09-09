@@ -14,63 +14,49 @@ import board
 import time
 from adafruit_bme280 import basic as adafruit_bme280
 from smbus2 import SMBus
-
-#Fremde Imports
-
 import pathlib
 import json
 import os
 
 #FLASK Imports
 
-from flask import Flask, request
+from flask import Flask, request, redirect, url_for
 import threading
 
 ##########################################################
 
 app = Flask(__name__)
 
-@app.after_request
-def add_cors_headers(resp):
-    # Für den Start offen lassen; später spezifische Origin setzen:
-    # resp.headers["Access-Control-Allow-Origin"] = "http://192.168.2.136"
-    resp.headers["Access-Control-Allow-Origin"] = "*"
-    resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-    resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
-    return resp
-
 @app.route("/btn1")
 def btn1():
     print("Button 1 gedrückt")
-    return "Button 1 OK"
+    return redirect("http://raspberrypi.local/Monitoring_V2.html")
 
 @app.route("/btn2")
 def btn2():
     print("Button 2 gedrückt")
-    return "Button 2 OK"
+    return redirect("http://raspberrypi.local/Monitoring_V2.html")
 
-# Text vom Client entgegennehmen (POST oder GET)
-@app.route("/sendtext", methods=["GET", "POST", "OPTIONS"])
+@app.route("/sendtext", methods=["POST"])
 def sendtext():
-    if request.method == "OPTIONS":
-        return ("", 204)  # CORS Preflight
-
-    # akzeptiere form-POST, JSON-POST und GET-Query
-    msg = (
-        request.form.get("msg") or
-        (request.get_json(silent=True) or {}).get("msg") or
-        request.args.get("msg", "")
-    )
-
-    print("Text empfangen:", msg)   # <-- hier in deine Unterfunktion weitergeben
-    # my_sub_function(msg)
-
-    return f"Empfangen: {msg}"
+    msg = request.form.get("msg", "")
+    print("Empfangen:", msg)
+    if msg.startswith("E1"):
+        parts = msg.split()
+        if(parts[1].isdigit()):
+            hc05lib.send_to_device(hc05lib.HC05S[0], parts[1])
+            print(f"Gesendet an Einheit 1: {parts[1]}")
+    elif msg.startswith("E2"):
+        parts = msg.split()
+        if(parts[1].isdigit()):
+            hc05lib.send_to_device(hc05lib.HC05S[1], parts[1])
+            print(f"Gesendet an Einheit 2: {parts[1]}")
+    return redirect("http://raspberrypi.local/Monitoring_V2.html")
 
 def start_flask():
     app.run(host="0.0.0.0", port=8000, debug=False, threaded=True)
 
-# Flask-Server im Hintergrund starten
+#Flask-Server im Hintergrund starten
 threading.Thread(target=start_flask, daemon=True).start()
 
 ##########################################################

@@ -78,39 +78,19 @@
       
     <div class="col">
       <div class="container self">
-		<input type="text" id="msg" placeholder="Nachricht eingeben">
-		<button onclick="sendText()">Senden</button>
-	 	<button onclick="send('/btn1')">Button 1</button>
-	 	<button onclick="send('/btn2')">Button 2</button></div>
+		<form action="http://raspberrypi.local:8000/sendtext" method="post">
+			<input type="text" name="msg" placeholder="Nachricht eingeben">
+			<button type="submit">Senden</button>
+		</form>
+	 	<a href="http://raspberrypi.local:8000/btn1"><button>Button 1</button></a>
+	 	<a href="http://raspberrypi.local:8000/btn2"><button>Button 2</button></a>
       </div>
     </div>
   </div>
 </div>
 
 	<script>
-	let startTime = Date.now();          // Startzeit merken
-
-	const API = `http://${window.location.hostname}:8000`;
-	
-	async function sendText() {
-	const msg = document.getElementById('msg').value;
-	const res = await fetch(`http://${window.location.hostname}:8000/sendtext`, {
-		method: "POST",
-		headers: {"Content-Type": "application/x-www-form-urlencoded"},
-		body: `msg=${encodeURIComponent(msg)}`
-	});
-	alert(await res.text());
-	}
-
-	function send(path){
-	    fetch(`${API}${path}`, { method: 'GET' })
-	      .then(r => {
-		if(!r.ok) throw new Error(`HTTP ${r.status}`);
-		return r.text();
-	      })
-	      .then(txt => document.getElementById('antwort').innerText = txt)
-	      .catch(err => document.getElementById('antwort').innerText = 'Fehler: ' + err);
-	  }
+	let startTime = Date.now();          //Startzeit merken
 	
 	async function refresh(){
 	    const r = await fetch('/latest.json?'+Date.now());
