@@ -56,7 +56,7 @@ def send_to_device(mac_address, msg):
         msg += "\n"
     try:
         sock.send(msg)                              #Sendet Nachricht
-        print(f"Gesendet an {mac_address}: {msg.strip()}")
+        #print(f"Gesendet an {mac_address}: {msg.strip()}")
     except Exception as e:
         print(f"Fehler beim Senden an {mac_address}: {e}")
 
@@ -79,28 +79,12 @@ def read_from_device(mac_address: str, timeout: float = 1.0) -> str | None:
     except bluetooth.btcommon.BluetoothError:       #Falls ein fehler Passiert geht er raus
         return None
 
-HC05S = [
-    "98:D3:C1:FE:93:89",  # HC-05 Einheit 1
-    #"98:D3:11:FD:6B:9F",  # HC-05 Einheit 2
-    "98:D3:51:FE:B4:D0", # HC-05 Test HC05
-]
-
-device_data = [[0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0]]
-btstring = ["Einheit", "BTData", "Drehzahl", "Cycle", "Periode", "Temp_Innen", "Humi_Innen", "Temp_Aussen", "Humi_Aussen"]
-
-HC05S = [
-    "98:D3:C1:FE:93:89",  # HC-05 Einheit 1
-    #"98:D3:11:FD:6B:9F",  # HC-05 Einheit 2
-    "98:D3:51:FE:B4:D0", # HC-05 Test HC05
-]
-
 def readdata(HC05S, btstring, device_data):
     
     #global device_data
     
     #Erste Schleife geht Liste durch zwichen den Geräten in HC05S 
     #Liest, Checkt ob info zur Einheit kommt und Speichert
-    #u Forschleife Zwischen den Geräten, If Checkt welches gerät aktuell schreibt
     #Geht so viele Nachtichten durch wie in der BTString liste stehen 
     
     for z in range(len(HC05S)):
@@ -109,14 +93,13 @@ def readdata(HC05S, btstring, device_data):
             if msg.startswith("Einheit:"):
                 parts = msg.split()
                 device_data[z][0] = parts[1]
-                for u in range(1, len(HC05S)+1):
-                    if int(device_data[z][0]) == u:
-                        for x in range(len(btstring)+1):
-                            msg = read_from_device(HC05S[z], timeout=0.0)
-                            if msg:
-                                for y in range(len(btstring)):
-                                    if msg.startswith(btstring[y]):
-                                        parts = msg.split()
-                                        device_data[z][y] = parts[1].replace("°C", "").replace("%", "").replace("U/min", "")
+                
+                for x in range(len(btstring)+1):
+                    msg = read_from_device(HC05S[z], timeout=0.0)
+                    if msg:
+                        for y in range(len(btstring)):
+                            if msg.startswith(btstring[y]):
+                                parts = msg.split()
+                                device_data[z][y] = parts[1].replace("°C", "").replace("%", "").replace("U/min", "")                                
 
     return device_data

@@ -44,12 +44,12 @@ def sendtext():
     if msg.startswith("E1"):
         parts = msg.split()
         if(parts[1].isdigit()):
-            hc05lib.send_to_device(hc05lib.HC05S[0], parts[1])
+            hc05lib.send_to_device(HC05S[0], parts[1])
             print(f"Gesendet an Einheit 1: {parts[1]}")
     elif msg.startswith("E2"):
         parts = msg.split()
         if(parts[1].isdigit()):
-            hc05lib.send_to_device(hc05lib.HC05S[1], parts[1])
+            hc05lib.send_to_device(HC05S[1], parts[1])
             print(f"Gesendet an Einheit 2: {parts[1]}")
     return redirect("http://raspberrypi.local/Monitoring_V2.html")
 
@@ -66,7 +66,7 @@ threading.Thread(target=start_flask, daemon=True).start()
 # ------------------------------
 
 HC05S = [
-    "98:D3:C1:FE:93:89",  # HC-05 Einheit 1
+    #"98:D3:C1:FE:93:89",  # HC-05 Einheit 1
     #"98:D3:11:FD:6B:9F",  # HC-05 Einheit 2
     "98:D3:51:FE:B4:D0", # HC-05 Test HC05
 ]
@@ -79,6 +79,9 @@ device_data = [[0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0]]
 
 btstring = ["Einheit", "BTData", "Drehzahl", "Cycle", "Periode", "Temp_Innen", "Humi_Innen", "Temp_Aussen", "Humi_Aussen"]
 
+cmd_write = ["day_name", "month", "day", "time", "year", "ctl"]
+
+fan_percent = 0
 
 # ------------------------------
 # Sensor-Setup
@@ -92,10 +95,11 @@ i2c = board.I2C()                                   # für adafruit_bme280
 bme280 = adafruit_bme280.Adafruit_BME280_I2C(i2c)   # bme280 initialisierung
 bme280.sea_level_pressure = 1013.25                  # Sealevel
 
-delay = 0  # start delay
+delay = 0
+delay_time_send = 0
 
 addr_pasco2 = 0x28         # i2c adresse co2 sensor
-measure_sec = 6            # Messwerte in Sek. (muss >5 sein)
+measure_sec = 10            # Messwerte in Sek. (muss >5 sein)
 
 pasco2.co2_prodID(addr_pasco2)               # Prod ID anzeigen
 pasco2.co2_init(addr_pasco2, measure_sec)    # Initialisierung / Messintervall
@@ -114,12 +118,19 @@ try:
     while True:
         
         device_data = hc05lib.readdata(HC05S, btstring, device_data)
-        
+        uhrzeit = time.ctime(time.time())
         jetzt = time.time()
+
+        if jetzt >= delay_time_send: #alle 2 Sekunden werden Tag=Mon, Monat=Jan, Tag=01, Zeit=12:00:00, Jahr=2025 an die Einheiten gesendet
+            parts = uhrzeit.split()
+            for p in range(len(HC05S)):
+                for i in range(len(parts)):
+                    hc05lib.send_to_device(HC05S[p], f"{cmd_write[i]}={parts[i]}")
+                    #print(f"Gesendet an Einheit {p+1}: {cmd_write[i]}={parts[i]}")
+            delay_time_send = jetzt + 2
+
         if jetzt >= delay:                  # nur alle measure_sec messen
             delay = jetzt + measure_sec
-
-            uhrzeit = time.ctime(time.time())
 
             try:
                 co2 = pasco2.co2_read(addr_pasco2)
@@ -161,8 +172,36 @@ try:
             
             # Speichern in der DB (Tabelle je Monat)
         
+        if co2 == 0:
+            # Sensorfehler ? Fallback
+            fan_percent = 50
+            hc05lib.send_to_device(HC05S[0], f"{cmd_write[5]}={fan_percent}")
+            mode = "FALLBACK"
+
+        elif co2 < 700:
+            fan_percent = 25
+            hc05lib.send_to_device(HC05S[0], f"{cmd_write[5]}={fan_percent}")
+            mode = "IDLE"
+
+        elif 700 <= co2 < 1200:
+            # Lüfterleistung steigt linear zwischen 20?80 %
+            fan_percent = 25 + (co2 - 700) * (60 / 500)
+            hc05lib.send_to_device(HC05S[0], f"{cmd_write[5]}={fan_percent}")
+            mode = "NORMAL"
+
+        elif co2 >= 1200:
+            fan_percent = 100   # Vollgas
+            hc05lib.send_to_device(HC05S[0], f"{cmd_write[5]}={fan_percent}")
+            mode = "BOOST"
+        
+        # Feuchte-Override
+        if humi > 60:
+            fan_percent = max(fan_percent, 60)
+            hc05lib.send_to_device(HC05S[0], f"{cmd_write[5]}={fan_percent}")
+            mode = "HUMIDITY"
+
         # Kurzer Schlaf, damit die CPU nicht rotiert
-        time.sleep(0.05)
+        time.sleep(0.5)
 
 except KeyboardInterrupt:
     print("Beende auf Wunsch (Ctrl+C)...")
