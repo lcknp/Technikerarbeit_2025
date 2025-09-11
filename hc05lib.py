@@ -90,8 +90,8 @@ def readdata(HC05S, btstring, device_data):
     for z in range(len(HC05S)):
         msg = read_from_device(HC05S[z])
         if msg:
-            if msg.startswith("Einheit:"):
-                parts = msg.split()
+            if msg.startswith("unit="):
+                parts = msg.split("=")
                 device_data[z][0] = parts[1]
                 
                 for x in range(len(btstring)+1):
@@ -99,7 +99,7 @@ def readdata(HC05S, btstring, device_data):
                     if msg:
                         for y in range(len(btstring)):
                             if msg.startswith(btstring[y]):
-                                parts = msg.split()
+                                parts = msg.split("=")
                                 device_data[z][y] = parts[1].replace("°C", "").replace("%", "").replace("U/min", "")                                
 
     return device_data

@@ -77,7 +77,7 @@ time.sleep(2)
 
 device_data = [[0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0]]
 
-btstring = ["Einheit", "BTData", "Drehzahl", "Cycle", "Periode", "Temp_Innen", "Humi_Innen", "Temp_Aussen", "Humi_Aussen"]
+btstring = ["unit=", "btdata=", "speed=", "cycle=", "period=", "temp_out=", "humi_out=", "temp_in=", "humi_in="]
 
 cmd_write = ["day_name", "month", "day", "time", "year", "ctl"]
 
@@ -110,7 +110,7 @@ time.sleep(10)                      # warten, bis erster Messwert fertig ist
 def write_json(d):
     TMP.write_text(json.dumps(d, ensure_ascii=False))
     os.replace(TMP, OUT)
-
+    
 # ------------------------------
 # Hauptschleife
 # ------------------------------
@@ -120,14 +120,6 @@ try:
         device_data = hc05lib.readdata(HC05S, btstring, device_data)
         uhrzeit = time.ctime(time.time())
         jetzt = time.time()
-
-        if jetzt >= delay_time_send: #alle 2 Sekunden werden Tag=Mon, Monat=Jan, Tag=01, Zeit=12:00:00, Jahr=2025 an die Einheiten gesendet
-            parts = uhrzeit.split()
-            for p in range(len(HC05S)):
-                for i in range(len(parts)):
-                    hc05lib.send_to_device(HC05S[p], f"{cmd_write[i]}={parts[i]}")
-                    #print(f"Gesendet an Einheit {p+1}: {cmd_write[i]}={parts[i]}")
-            delay_time_send = jetzt + 2
 
         if jetzt >= delay:                  # nur alle measure_sec messen
             delay = jetzt + measure_sec
@@ -152,10 +144,10 @@ try:
             
             for i in range(2):
                 print(f"Einheit:        {device_data[i][0]}")
-                print(f"Temp innen:     {device_data[i][5]} C")
-                print(f"Humidity innen: {device_data[i][6]} %")
-                print(f"Taussen:        {device_data[i][7]} C")
+                print(f"Temp innen:     {device_data[i][7]} C")
                 print(f"Humidity innen: {device_data[i][8]} %")
+                print(f"Taussen:        {device_data[i][5]} C")
+                print(f"Humidity aussen:{device_data[i][6]} %")
                 print(f"Drehzahl:       {device_data[i][2]} U/min")
                 print(f"Periode:        {device_data[i][4]}\n")
 
@@ -165,41 +157,51 @@ try:
                     }
                     
             write_json(data)  # für Website
-
-            funktion_db.databasesafe("raspi", uhrzeit, co2, temp, humi, pressure)
-            funktion_db.databasesafe("ardu1", uhrzeit, 0, device_data[0][5], device_data[0][6], 0)
-            funktion_db.databasesafe("ardu2", uhrzeit, 0, device_data[1][5], device_data[1][6], 0)
             
-            # Speichern in der DB (Tabelle je Monat)
+            datasafedelay = datasafedelay + 1
+            if datasafedelay >= 360:  # alle 1 Stunde in die DB speichern
+                funktion_db.databasesafe("raspi", uhrzeit, co2, temp, humi, pressure)
+                funktion_db.databasesafe(f"ardu{device_data[0][0]}", uhrzeit, 0, device_data[0][5], device_data[0][6], 0)
+                funktion_db.databasesafe(f"ardu{device_data[1][0]}", uhrzeit, 0, device_data[1][5], device_data[1][6], 0)
+                datasafedelay = 0    
+                # Speichern in der DB (Tabelle je Monat)
+
+        if jetzt >= delay_time_send: #alle 2 Sekunden werden Tag=Mon, Monat=Jan, Tag=01, Zeit=12:00:00, Jahr=2025 an die Einheiten gesendet
+            parts = uhrzeit.split()
+            for p in range(len(HC05S)):
+                for i in range(len(parts)):
+                    hc05lib.send_to_device(HC05S[p], f"{cmd_write[i]}={parts[i]}")
+                    #print(f"Gesendet an Einheit {p+1}: {cmd_write[i]}={parts[i]}")
+                
+                if co2 == 0:
+                    # Sensorfehler ? Fallback
+                    fan_percent = 50
+                    hc05lib.send_to_device(HC05S[p], f"{cmd_write[5]}={fan_percent}")
+                    mode = "FALLBACK"
+
+                elif co2 < 700:
+                    fan_percent = 25
+                    hc05lib.send_to_device(HC05S[p], f"{cmd_write[5]}={fan_percent}")
+                    mode = "IDLE"
+
+                elif 700 <= co2 < 1200:
+                    # Lüfterleistung steigt linear zwischen 20?80 %
+                    fan_percent = 25 + (co2 - 700) * (60 / 500)
+                    hc05lib.send_to_device(HC05S[p], f"{cmd_write[5]}={fan_percent}")
+                    mode = "NORMAL"
+
+                elif co2 >= 1200:
+                    fan_percent = 100   # Vollgas
+                    hc05lib.send_to_device(HC05S[p], f"{cmd_write[5]}={fan_percent}")
+                    mode = "BOOST"
+                
+                # Feuchte-Override
+                if humi > 60:
+                    fan_percent = max(fan_percent, 60)
+                    hc05lib.send_to_device(HC05S[p], f"{cmd_write[5]}={fan_percent}")
+                    mode = "HUMIDITY"
+            delay_time_send = jetzt + 2
         
-        if co2 == 0:
-            # Sensorfehler ? Fallback
-            fan_percent = 50
-            hc05lib.send_to_device(HC05S[0], f"{cmd_write[5]}={fan_percent}")
-            mode = "FALLBACK"
-
-        elif co2 < 700:
-            fan_percent = 25
-            hc05lib.send_to_device(HC05S[0], f"{cmd_write[5]}={fan_percent}")
-            mode = "IDLE"
-
-        elif 700 <= co2 < 1200:
-            # Lüfterleistung steigt linear zwischen 20?80 %
-            fan_percent = 25 + (co2 - 700) * (60 / 500)
-            hc05lib.send_to_device(HC05S[0], f"{cmd_write[5]}={fan_percent}")
-            mode = "NORMAL"
-
-        elif co2 >= 1200:
-            fan_percent = 100   # Vollgas
-            hc05lib.send_to_device(HC05S[0], f"{cmd_write[5]}={fan_percent}")
-            mode = "BOOST"
-        
-        # Feuchte-Override
-        if humi > 60:
-            fan_percent = max(fan_percent, 60)
-            hc05lib.send_to_device(HC05S[0], f"{cmd_write[5]}={fan_percent}")
-            mode = "HUMIDITY"
-
         # Kurzer Schlaf, damit die CPU nicht rotiert
         time.sleep(0.5)
 
