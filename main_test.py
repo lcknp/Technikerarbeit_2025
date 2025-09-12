@@ -175,7 +175,7 @@ try:
             for p in range(len(HC05S)):
                 if co2 == 0:
                     # Sensorfehler ? Fallback
-                    fan_percent = 50
+                    fan_percent = 25
                     hc05lib.send_to_device(HC05S[p], f"{cmd_write[5]}={fan_percent}")
                     mode = "FALLBACK"
 
