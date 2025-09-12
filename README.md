@@ -32,13 +32,13 @@ Features
 	•	Zeit-Sync: Stündlich an beide Einheiten übertragen
 	•	Robustheit: CO₂-Sensor-Fehler → Fallback-Modus (50 %)
 
-Hardware
+	Hardware
 	•	Raspberry Pi (mit aktivem I²C und Bluetooth)
 	•	PAS CO₂-Sensor (I²C, Addr 0x28)
 	•	BME280 (I²C, typ. Addr 0x76 oder 0x77)
 	•	2× HC-05 Bluetooth-Module (gepairt & vertrauenswürdig)
 
-Steuerlogik (Kurzüberblick)
+	Steuerlogik (Kurzüberblick)
 	•	Fallback: CO₂-Wert 0 (Sensorfehler) → 50 %
 	•	CO₂-Schwellen:
 	•	< 700 ppm: 25 % (IDLE)
