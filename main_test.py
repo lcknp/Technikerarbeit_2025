@@ -66,9 +66,9 @@ threading.Thread(target=start_flask, daemon=True).start()
 # ------------------------------
 
 HC05S = [
-    #"98:D3:C1:FE:93:89",  # HC-05 Einheit 1
-    #"98:D3:11:FD:6B:9F",  # HC-05 Einheit 2
-    "98:D3:51:FE:B4:D0", # HC-05 Test HC05
+    "98:D3:C1:FE:93:89",  # HC-05 Einheit 1
+    "98:D3:11:FD:6B:9F",  # HC-05 Einheit 2
+    #"98:D3:51:FE:B4:D0", # HC-05 Test HC05
 ]
 
 
@@ -100,6 +100,7 @@ delay_time_send = 0
 
 addr_pasco2 = 0x28         # i2c adresse co2 sensor
 measure_sec = 10            # Messwerte in Sek. (muss >5 sein)
+datasafedelay = 0
 
 pasco2.co2_prodID(addr_pasco2)               # Prod ID anzeigen
 pasco2.co2_init(addr_pasco2, measure_sec)    # Initialisierung / Messintervall
@@ -118,6 +119,9 @@ try:
     while True:
         
         device_data = hc05lib.readdata(HC05S, btstring, device_data)
+        # Kurzer Schlaf, damit die CPU nicht rotiert
+        time.sleep(0.1)
+
         uhrzeit = time.ctime(time.time())
         jetzt = time.time()
 
@@ -158,21 +162,17 @@ try:
                     
             write_json(data)  # für Website
             
-            datasafedelay = datasafedelay + 1
-            if datasafedelay >= 360:  # alle 1 Stunde in die DB speichern
-                funktion_db.databasesafe("raspi", uhrzeit, co2, temp, humi, pressure)
-                funktion_db.databasesafe(f"ardu{device_data[0][0]}", uhrzeit, 0, device_data[0][5], device_data[0][6], 0)
-                funktion_db.databasesafe(f"ardu{device_data[1][0]}", uhrzeit, 0, device_data[1][5], device_data[1][6], 0)
+            datasafedelay = datasafedelay + 1 
+            if datasafedelay >= 90: # alle 15 Minuten speichern 
+                funktion_db.databasesafe("raspi", uhrzeit, round(co2, 2), round(temp, 2), round(humi, 2), round(pressure, 2), 0, 0, 0, 0)
+                for idx, row in enumerate(device_data): # schaut ob Daten vorhanden sind
+                    if row and all(row[i] not in (None, "", 0) for i in (0, 6, 7, 8)):
+                        funktion_db.databasesafe(   f"ardu{row[0]}", uhrzeit, 0, 0, 0, 0, row[7], row[8], row[5], row[6]
+                        )
                 datasafedelay = 0    
-                # Speichern in der DB (Tabelle je Monat)
+            #Speichern in der DB (Tabelle je Monat)
 
-        if jetzt >= delay_time_send: #alle 2 Sekunden werden Tag=Mon, Monat=Jan, Tag=01, Zeit=12:00:00, Jahr=2025 an die Einheiten gesendet
-            parts = uhrzeit.split()
             for p in range(len(HC05S)):
-                for i in range(len(parts)):
-                    hc05lib.send_to_device(HC05S[p], f"{cmd_write[i]}={parts[i]}")
-                    #print(f"Gesendet an Einheit {p+1}: {cmd_write[i]}={parts[i]}")
-                
                 if co2 == 0:
                     # Sensorfehler ? Fallback
                     fan_percent = 50
@@ -191,19 +191,26 @@ try:
                     mode = "NORMAL"
 
                 elif co2 >= 1200:
-                    fan_percent = 100   # Vollgas
+                    fan_percent = 90   # Vollgas
                     hc05lib.send_to_device(HC05S[p], f"{cmd_write[5]}={fan_percent}")
                     mode = "BOOST"
-                
-                # Feuchte-Override
+                    
+                    # Feuchte-Override
                 if humi > 60:
                     fan_percent = max(fan_percent, 60)
                     hc05lib.send_to_device(HC05S[p], f"{cmd_write[5]}={fan_percent}")
                     mode = "HUMIDITY"
-            delay_time_send = jetzt + 2
+
+        if jetzt >= delay_time_send: #Tag=Mon, Monat=Jan, Tag=01, Zeit=12:00:00, Jahr=2025 an die Einheiten gesendet
+            parts = uhrzeit.split()
+            for p in range(len(HC05S)):
+                for i in range(len(parts)):
+                    hc05lib.send_to_device(HC05S[p], f"{cmd_write[i]}={parts[i]}")
+                    time.sleep(0.1)
+                    #print(f"Gesendet an Einheit {p+1}: {cmd_write[i]}={parts[i]}")
+            print(f"Zeit-Sync gesendet: {uhrzeit}\n")
+            delay_time_send = jetzt +  3600  # alle 60 Minuten
         
-        # Kurzer Schlaf, damit die CPU nicht rotiert
-        time.sleep(0.5)
 
 except KeyboardInterrupt:
     print("Beende auf Wunsch (Ctrl+C)...")

@@ -2,20 +2,23 @@
 #   by Luca Knapp
 #
 #   Database Funktion
-#   v0.1
+#   v0.2
 #
-#   26.08.2025
+#   11.09.2025
 #
 #  Copyright 2025
 
 import pymysql
 import time
 
-# Globale Einstellung: soll die DB beim Start geleert werden?
-reset_db = False   # ? True = Tabelle wird auf 0 gesetzt
+def databasesafe(device, uhrzeit, co2=None, temp=None, humi=None, pressure=None, temp_in=None, humi_in=None, temp_out=None, humi_out=None):
+    """
+    Speichert Messwerte in einer Monats-Tabelle (Messungen_YYYYMM).
+    - uhrzeit: String im Format "%a %b %d %H:%M:%S %Y"
+    - device: Ger�tename (z.B. 'raspi1', 'ardu1', ...)
+    - Messwerte: als float oder None
+    """
 
-def databasesafe(device, uhrzeit, co2, temp, humi, pressure):
-    
     # String -> struct_time parsen
     t = time.strptime(uhrzeit, "%a %b %d %H:%M:%S %Y")
     # struct_time -> ISO-Format für DB
@@ -23,7 +26,7 @@ def databasesafe(device, uhrzeit, co2, temp, humi, pressure):
     # Tabellennamen: YYYYMM
     #ym = time.strftime("%Y%m", t)
 
-    # Verbindung zur DB öffnen
+    #Verbindung zur DB öffnen
     db = pymysql.connect(
         host="localhost",
         user="luca",
@@ -36,30 +39,40 @@ def databasesafe(device, uhrzeit, co2, temp, humi, pressure):
     
     table_name = f"Messungen_{t.tm_year}{t.tm_mon:02d}"
     
+    #Tabelle erstellen, falls nicht vorhanden
     create_sql = f"""
         CREATE TABLE IF NOT EXISTS {table_name} (
             id BIGINT AUTO_INCREMENT PRIMARY KEY,
             uhrzeit VARCHAR(50),
             device VARCHAR(50),
-            co2 DECIMAL(10,2),
-            temp DECIMAL(6,2),
-            humi DECIMAL(6,2),
-            pressure DECIMAL(8,2)
+            co2 DOUBLE NULL,
+            temp DOUBLE NULL,
+            humi DOUBLE NULL,
+            pressure DOUBLE NULL,
+            temp_in DOUBLE NULL,
+            humi_in DOUBLE NULL,
+            temp_out DOUBLE NULL,
+            humi_out DOUBLE NULL
         )
     """
     cur.execute(create_sql)
 
-    # Wenn reset_db aktiv: Tabelle leeren
-    if reset_db:
-        cur.execute(f"TRUNCATE TABLE {table_name}")
-        print(f"Tabelle {table_name} wurde zurückgesetzt!")
-
-    # Datensatz speichern
+    #Datensatz speichern
     insert_sql = f"""
-        INSERT INTO {table_name} (uhrzeit, device, co2, temp, humi, pressure)
-        VALUES (%s, %s, %s, %s, %s, %s)
+        INSERT INTO {table_name}
+        (uhrzeit, device, co2, temp, humi, pressure, temp_in, humi_in, temp_out, humi_out)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON DUPLICATE KEY UPDATE
+            co2=VALUES(co2),
+            temp=VALUES(temp),
+            humi=VALUES(humi),
+            pressure=VALUES(pressure),
+            temp_in=VALUES(temp_in),
+            humi_in=VALUES(humi_in),
+            temp_out=VALUES(temp_out),
+            humi_out=VALUES(humi_out);
     """
-    cur.execute(insert_sql, (uhrzeit, device, co2, temp, humi, pressure))
+    cur.execute(insert_sql, (uhrzeit, device, co2, temp, humi, pressure, temp_in, humi_in, temp_out, humi_out))
     print(f"Daten gespeichert in {table_name}!\n")
 
     # Verbindung schließen
