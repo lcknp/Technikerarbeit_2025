@@ -14,7 +14,7 @@ Datei: Test.py
 
 Features
 	
-	Flask-Server mit Endpunkten:
+	Flask-Server mit Endpunkten: (Noch nicht benutzt)
 	•	GET /btn1, GET /btn2 → Klick-Aktionen (leiten auf http://raspberrypi.local/Monitoring_V2.html um)
 	•	POST /sendtext → Textkommandos an Einheiten (z. B. "E1 50" → Einheit 1 auf Wert 50)
 	•	Bluetooth (HC-05): Zwei Geräte per MAC verbunden, Kommandos aus App/Website → hc05lib
@@ -46,7 +46,7 @@ Features
 	•	>= 1200 ppm: 90 % (BOOST)
 	•	Feuchte-Override: humi > 60 % → mindestens 60 %
 
-Die jeweils berechnete fan_percent wird als ctl=<WERT> an beide HC-05-Einheiten gesendet.
+	Die jeweils berechnete fan_percent wird als ctl=<WERT> an beide HC-05-Einheiten gesendet.
 
 ⸻
 
@@ -55,6 +55,3 @@ Datenablage
 	•	DB-Logging: alle 15 Minuten (ca. wenn datasafedelay >= 90 bei measure_sec=10):
 	•	funktion_db.databasesafe("raspi", ...) – BME280/PAS-Werte
 	•	für jede BT-Einheit (wenn Daten vorhanden): funktion_db.databasesafe(f"ardu{row[0]}", ...) – Innen/Außen-Werte
-
-Passe deine Tabellen/DSN in funktion_db an.
-
