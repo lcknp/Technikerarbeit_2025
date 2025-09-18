@@ -75,9 +75,11 @@ HC05S = [
 hc05lib.start_all(HC05S)
 time.sleep(2)
 
+# Variablen für BT-Daten
+
 device_data = [[0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0]]
 
-btstring = ["unit=", "btdata=", "speed=", "cycle=", "period=", "temp_out=", "humi_out=", "temp_in=", "humi_in="]
+cmd_read = ["unit=", "btdata=", "speed=", "cycle=", "period=", "temp_out=", "humi_out=", "temp_in=", "humi_in="]
 
 cmd_write = ["day_name", "month", "day", "time", "year", "ctl"]
 
@@ -93,18 +95,15 @@ OUT = pathlib.Path("/var/www/html/latest.json")
 bus = SMBus(1)
 i2c = board.I2C()                                   # für adafruit_bme280
 bme280 = adafruit_bme280.Adafruit_BME280_I2C(i2c)   # bme280 initialisierung
-bme280.sea_level_pressure = 1013.25                  # Sealevel
+bme280.sea_level_pressure = 1000                  # Sealevel
 
 delay = 0
 delay_time_send = 0
-
-addr_pasco2 = 0x28         # i2c adresse co2 sensor
-measure_sec = 10            # Messwerte in Sek. (muss >5 sein)
 datasafedelay = 0
 
-pasco2.co2_prodID(addr_pasco2)               # Prod ID anzeigen
-pasco2.co2_init(addr_pasco2, measure_sec)    # Initialisierung / Messintervall
-pasco2.co2_startmode(addr_pasco2)            # Continuous Mode aktivieren
+co2 = pasco2.pasco2init()
+
+concentration_waiting = False
 
 time.sleep(10)                      # warten, bis erster Messwert fertig ist
 
@@ -118,7 +117,7 @@ def write_json(d):
 try:
     while True:
         
-        device_data = hc05lib.readdata(HC05S, btstring, device_data)
+        device_data = hc05lib.readdata(HC05S, cmd_read, device_data)
         # Kurzer Schlaf, damit die CPU nicht rotiert
         time.sleep(0.1)
 
@@ -126,10 +125,16 @@ try:
         jetzt = time.time()
 
         if jetzt >= delay:                  # nur alle measure_sec messen
-            delay = jetzt + measure_sec
+            delay = jetzt + 10
 
             try:
-                co2 = pasco2.co2_read(addr_pasco2)
+                if ((pasco2.read_value(pasco2.REG_MEAS_STS) >> 4) & 0b1) == 1:
+                    if concentration_waiting:
+                        concentration_waiting = False
+                        co2 = pasco2.read_value_double(pasco2.REG_CO2PPM_H)
+                    if not concentration_waiting:
+                        print("Warte auf CO2 Werte")
+                        concentration_waiting = True
             except OSError as e:
                 co2 = 0
                 print("Fehler beim CO2-Sensor:", e)
@@ -217,8 +222,10 @@ except KeyboardInterrupt:
 
 finally:
     try:
-        bus.close()
         hc05lib.stop_all()
+        pasco2.write_value(pasco2.REG_MEAS_CFG, pasco2.read_value(pasco2.REG_MEAS_CFG) & 0b11111100) # set mode to idle
+        pasco2.bus.close()
+        bus.close()
     except Exception:
         pass
     print("Alles gestoppt.")

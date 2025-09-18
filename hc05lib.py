@@ -59,11 +59,15 @@ def send_to_device(mac_address, msg):
         #print(f"Gesendet an {mac_address}: {msg.strip()}")
     except Exception as e:
         print(f"Fehler beim Senden an {mac_address}: {e}")
+        stop_device(mac_address)
+        start_device(mac_address)
 
 def read_from_device(mac_address: str, timeout: float = 1.0) -> str | None:
     sock = connected_devices.get(mac_address)       #Holt aus dem Dict info MAC und Socket Objekt
     if not sock:                                    #Wenn nicht verbunden
         print(f"{mac_address} ist nicht verbunden.")
+        stop_device(mac_address)
+        start_device(mac_address)
         return None
 
     sock.settimeout(timeout)                        #Setzt Timeout
@@ -79,13 +83,13 @@ def read_from_device(mac_address: str, timeout: float = 1.0) -> str | None:
     except bluetooth.btcommon.BluetoothError:       #Falls ein fehler Passiert geht er raus
         return None
 
-def readdata(HC05S, btstring, device_data):
+def readdata(HC05S, cmd_read, device_data):
     
     #global device_data
     
     #Erste Schleife geht Liste durch zwichen den Geräten in HC05S 
     #Liest, Checkt ob info zur Einheit kommt und Speichert
-    #Geht so viele Nachtichten durch wie in der BTString liste stehen 
+    #Geht so viele Nachtichten durch wie in der cmd_read liste stehen 
     
     for z in range(len(HC05S)):
         msg = read_from_device(HC05S[z])
@@ -94,11 +98,11 @@ def readdata(HC05S, btstring, device_data):
                 parts = msg.split("=")
                 device_data[z][0] = parts[1]
                 
-                for x in range(len(btstring)+1):
+                for x in range(len(cmd_read)+1):
                     msg = read_from_device(HC05S[z], timeout=0.0)
                     if msg:
-                        for y in range(len(btstring)):
-                            if msg.startswith(btstring[y]):
+                        for y in range(len(cmd_read)):
+                            if msg.startswith(cmd_read[y]):
                                 parts = msg.split("=")
                                 device_data[z][y] = parts[1].replace("°C", "").replace("%", "").replace("U/min", "")                                
 
