@@ -53,15 +53,16 @@ int Luefter_ansteuerung(int k, int l, const long pushpulldelay) {
   static unsigned long letzteMillis = 0;
   unsigned long derzeitMillis = millis();
   
-  char Tage[7][12] = {"Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"}; // Array für die Wochentage
-
   static bool toggle = 0;
   if (derzeitMillis - letzteMillis >= pushpulldelay) {
       letzteMillis = derzeitMillis;
       toggle = ((millis() / pushpulldelay) % 2) == 0;
   }
+  
   byte a = now.hour();
-  if ((Tage[now.dayOfTheWeek()] == "Montag" || "Dienstag" || "Mittwoch" || "Donnerstag" || "Freitag") && (a >= 6 && a <= 17)) {
+  byte wochentag = now.dayOfTheWeek();
+  
+  if ((wochentag >= 1 && wochentag <= 5) && (a >= 6 && a <= 17)) {
       if (toggle) {
         z = k;
         //Serial.println("zuluft");
@@ -72,7 +73,7 @@ int Luefter_ansteuerung(int k, int l, const long pushpulldelay) {
         //lastData = l;
       }
     }
-  else if ((now.day() >= 1 && now.day() <= 5) && a == 4) {
+  else if ((wochentag >= 1 && wochentag <= 5) && a == 4) {
     z = 85;
   } 
   else {

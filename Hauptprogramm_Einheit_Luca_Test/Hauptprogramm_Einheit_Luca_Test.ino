@@ -52,7 +52,7 @@ const long delaysekunde = 1000;                             //Zeit für Interval
 unsigned long letzteMillis = 0;                             //Variable für Programmdurchlauf
 unsigned long previousMillis = 0;                           //Speichert letzter Wert des durchgangs
 
-const long delayauto = 300000;                               //Delay für Push/Pull belüftung 5 min
+long pushpulldelay = 30000;                               //Delay für Push/Pull belüftung 5 min
 
 const unsigned long TIMEOUT = 15000;                         //timeout für btdata, d.h. wenn nach x(millis) nichts kommt schält er in mode 1
 unsigned long lastReceiveTime = 0;                          //Variable für Letzte zeit die BT Data gesendet wurde
@@ -64,7 +64,7 @@ unsigned long lastReceiveTime = 0;                          //Variable für Letz
 
 String btData = "";                                                   //raw Data
 String strvalue;                                                      //stgvalue -> String Wert der in int konvertiert werden muss.
-String cmd[] = {"day_name", "month", "day", "time", "year", "ctl"};   //Befehlssatz
+String cmd[] = {"day_name", "month", "day", "time", "year", "ctl", "delay"};   //Befehlssatz
 String param;                                                         //<Parameter/Kommand>
 int ctl = 50;                                                         //<Value/Wert>
 
@@ -150,6 +150,9 @@ void btread(){
           l = map(ctl, 0, 100, 50, 0);
           k = map(ctl, 0, 100, 50, 100);
           }
+    }      
+      if(param == cmd[6]){
+        pushpulldelay = strvalue.toInt();      
     }
 
 }
@@ -182,7 +185,7 @@ void setup () {
       rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
      }
   */
-  //rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
 }
 
 //************************************************************************************************************//
@@ -204,6 +207,7 @@ void loop () {
     mode = 1;
     k = 30;
     l = 70;
+    pushpulldelay = 30000;
   } 
 
   //Zeitjustierung Automatisch wenn Raspi neue Daten liefert
@@ -244,7 +248,7 @@ void loop () {
     Serial.println(einheit);
     Drehzahl_berechnung(var_dutyCycle);                                               // Funktionsaufruf zur Drehzahlberechnung
     Einmalige_Zeitanpassung();                                                        // Einmalige Zeitjustierung nach Programmstart
-    var_dutyCycle = Luefter_ansteuerung(k, l, delayauto);                             // Funktionsaufruf zur Zeitabhängigen Lüfteransteuerung
+    var_dutyCycle = Luefter_ansteuerung(k, l, pushpulldelay);                             // Funktionsaufruf zur Zeitabhängigen Lüfteransteuerung
     Sensor_auswertung();                                                              // Funktionsaufruf zur Ausgabe der aktuellen Temperatur und Feuchtigkeit
     Serial.println("----------------------------------------------------------------------------------");
   }
