@@ -30,6 +30,8 @@ REG_SENS_RST    = 0x10 # Sensor reset
 
 REG_MEAS_CFG_OP_MODE = {0b00: "idle", 0b01: "single-shot", 0b10: "continuous", 0b11: "reserved"}
 
+concentration_waiting = False
+co2 = 0
 
 def read_value(register):
 	value = bus.read_i2c_block_data(SENSOR_I2C_ADDR, register, 1)
@@ -89,7 +91,25 @@ def pasco2init():
     print("--- CO2 concentration ---")
     print("{} ppm".format(read_value_double(REG_CO2PPM_H)))
     co2 = read_value_double(REG_CO2PPM_H)
+
     return co2
+
+def read_co2():
+        global concentration_waiting
+        global co2
+        
+        try:
+            if ((read_value(REG_MEAS_STS) >> 4) & 0b1) == 1:
+                if concentration_waiting:
+                    concentration_waiting = False
+                co2 = read_value_double(REG_CO2PPM_H)
+            if not concentration_waiting:
+                print("Warte auf CO2 Werte")
+                concentration_waiting = True
+        except OSError: # I2C Fehler
+                None
+
+        return co2
 
 # soft reset
 

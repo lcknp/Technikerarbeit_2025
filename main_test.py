@@ -71,17 +71,20 @@ HC05S = [
     #"98:D3:51:FE:B4:D0", # HC-05 Test HC05
 ]
 
+# Anzahl der Datenpunkte pro Gerät (z. B. Sensorwerte)
+data_points = 9
+
+# device_data automatisch generieren
+device_data = [[0] * data_points for _ in HC05S]
 
 hc05lib.start_all(HC05S)
-time.sleep(2)
+time.sleep(5) #Warte bis HC05 bereit ist
 
 # Variablen für BT-Daten
 
-device_data = [[0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0]]
-
 cmd_read = ["unit=", "btdata=", "speed=", "cycle=", "period=", "temp_out=", "humi_out=", "temp_in=", "humi_in="]
 
-cmd_write = ["day_name", "month", "day", "time", "year", "ctl"]
+cmd_write = ["day_name", "month", "day", "time", "year", "ctl", "delay", "rasp_read"]
 
 fan_percent = 0
 
@@ -103,10 +106,6 @@ datasafedelay = 0
 
 co2 = pasco2.pasco2init()
 
-concentration_waiting = False
-
-time.sleep(10)                      # warten, bis erster Messwert fertig ist
-
 def write_json(d):
     TMP.write_text(json.dumps(d, ensure_ascii=False))
     os.replace(TMP, OUT)
@@ -116,33 +115,38 @@ def write_json(d):
 # ------------------------------
 try:
     while True:
-        
-        device_data = hc05lib.readdata(HC05S, cmd_read, device_data)
-        # Kurzer Schlaf, damit die CPU nicht rotiert
-        time.sleep(0.1)
 
         uhrzeit = time.ctime(time.time())
         jetzt = time.time()
 
-        if jetzt >= delay:                  # nur alle measure_sec messen
-            delay = jetzt + 10
+        co2 = pasco2.read_co2()
 
-            try:
-                if ((pasco2.read_value(pasco2.REG_MEAS_STS) >> 4) & 0b1) == 1:
-                    if concentration_waiting:
-                        concentration_waiting = False
-                        co2 = pasco2.read_value_double(pasco2.REG_CO2PPM_H)
-                    if not concentration_waiting:
-                        print("Warte auf CO2 Werte")
-                        concentration_waiting = True
-            except OSError as e:
-                co2 = 0
-                print("Fehler beim CO2-Sensor:", e)
-
+        try:
             temp = bme280.temperature
-            humi = bme280.relative_humidity
+            humi = bme280.humidity
             pressure = bme280.pressure
             altitude = bme280.altitude
+        except OSError: # I2C Fehler
+            print("BME280 Fehler")
+            None
+
+        if jetzt >= delay:      
+            delay = jetzt + 1   # + x Sekunden
+
+            jetzt = time.localtime()
+
+            wochentag = jetzt.tm_wday  # Montag = 0, Sonntag = 6
+            stunde = jetzt.tm_hour     # 0 bis 23
+
+            if wochentag < 5:  # Montag bis Freitag
+                if 6 <= stunde < 18:
+                    hc05lib.writedata(HC05S, cmd_write, co2)  #Lüfterstufe an alle Geräte senden
+                elif 4 <= stunde < 6:
+                    hc05lib.writedata(HC05S, cmd_write, co2)  #Lüfterstufe an alle Geräte senden
+                else:
+                    hc05lib.write_off(HC05S, cmd_write)
+            else:
+                hc05lib.write_off(HC05S, cmd_write)
 
             print(uhrzeit)
             print(f"CO2: {co2:.2f} ppm")
@@ -151,7 +155,7 @@ try:
             print(f"Pressure:    {pressure:.1f} hPa")
             print(f"Altitude:    {altitude:.2f} m\n")
             
-            for i in range(2):
+            for i in range(len(HC05S)):
                 print(f"Einheit:        {device_data[i][0]}")
                 print(f"Temp innen:     {device_data[i][7]} C")
                 print(f"Humidity innen: {device_data[i][8]} %")
@@ -168,53 +172,25 @@ try:
             write_json(data)  # für Website
             
             datasafedelay = datasafedelay + 1 
-            if datasafedelay >= 90: # alle 15 Minuten speichern 
+            if datasafedelay >= 1: # alle Sekunde
                 funktion_db.databasesafe("raspi", uhrzeit, round(co2, 2), round(temp, 2), round(humi, 2), round(pressure, 2), 0, 0, 0, 0)
                 for idx, row in enumerate(device_data): # schaut ob Daten vorhanden sind
-                    if row and all(row[i] not in (None, "", 0) for i in (0, 6, 7, 8)):
-                        funktion_db.databasesafe(   f"ardu{row[0]}", uhrzeit, 0, 0, 0, 0, row[7], row[8], row[5], row[6]
+                    if row and all(row[i] not in (None, "", 0) for i in (0, 4, 6, 7, 8)):
+                        funktion_db.databasesafe(   f"ardu{row[0]}", uhrzeit, 0, 0, 0, row[4], row[7], row[8], row[5], row[6]
                         )
                 datasafedelay = 0    
             #Speichern in der DB (Tabelle je Monat)
 
-            for p in range(len(HC05S)):
-                if co2 == 0:
-                    # Sensorfehler ? Fallback
-                    fan_percent = 30
-                    hc05lib.send_to_device(HC05S[p], f"{cmd_write[5]}={fan_percent}")
-                    mode = "FALLBACK"
+            hc05lib.send_to_device(HC05S[0], f"{cmd_write[7]}=")
+            hc05lib.send_to_device(HC05S[1], f"{cmd_write[7]}=")
 
-                elif co2 < 700:
-                    fan_percent = 30
-                    hc05lib.send_to_device(HC05S[p], f"{cmd_write[5]}={fan_percent}")
-                    mode = "IDLE"
+        # BT-Daten von den Einheiten lesen
 
-                elif 700 <= co2 < 1200:
-                    # Lüfterleistung steigt linear zwischen 20?80 %
-                    fan_percent = 25 + (co2 - 700) * (60 / 500)
-                    hc05lib.send_to_device(HC05S[p], f"{cmd_write[5]}={fan_percent}")
-                    mode = "NORMAL"
+        device_data = hc05lib.readdata(HC05S, cmd_read, cmd_write, device_data)
 
-                elif co2 >= 1200:
-                    fan_percent = 90   # Vollgas
-                    hc05lib.send_to_device(HC05S[p], f"{cmd_write[5]}={fan_percent}")
-                    mode = "BOOST"
-                    
-                    # Feuchte-Override
-                if humi > 60:
-                    fan_percent = max(fan_percent, 60)
-                    hc05lib.send_to_device(HC05S[p], f"{cmd_write[5]}={fan_percent}")
-                    mode = "HUMIDITY"
+        # Zeit-Sync an die Einheiten senden
 
-        if jetzt >= delay_time_send: #Tag=Mon, Monat=Jan, Tag=01, Zeit=12:00:00, Jahr=2025 an die Einheiten gesendet
-            parts = uhrzeit.split()
-            for p in range(len(HC05S)):
-                for i in range(len(parts)):
-                    hc05lib.send_to_device(HC05S[p], f"{cmd_write[i]}={parts[i]}")
-                    time.sleep(0.1)
-                    #print(f"Gesendet an Einheit {p+1}: {cmd_write[i]}={parts[i]}")
-            print(f"Zeit-Sync gesendet: {uhrzeit}\n")
-            delay_time_send = jetzt +  3600  # alle 60 Minuten
+        hc05lib.time_sync(HC05S, cmd_write)
         
 
 except KeyboardInterrupt:
