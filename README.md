@@ -3,12 +3,13 @@
 Meine Technikerareit 2025/26
 
 
-Monitoring & Steuerung – CO₂/BME280 + HC-05 (Raspberry Pi)
+Monitoring & Steuerung – CO₂/BME280 (Raspberry Pi)
+Arduino - HC05 Modul
 
 Dieses Projekt liest Sensordaten (CO₂ via PAS CO2 über I²C, Temperatur/Feuchte/Druck via BME280) auf einem Raspberry Pi aus, steuert zwei HC-05-Bluetooth-Einheiten (z. B. Lüfter) abhängig von CO₂/Feuchte, stellt einen kleinen Flask-Webserver bereit und speichert zyklisch Messwerte (JSON für Website + Datenbank).
 
 Autor: Luca Knapp
-Datei: Test.py
+Datei: main_test.py
 
 ⸻
 
@@ -36,7 +37,7 @@ Features
 	•	Raspberry Pi (mit aktivem I²C und Bluetooth)
 	•	PAS CO₂-Sensor (I²C, Addr 0x28)
 	•	BME280 (I²C, typ. Addr 0x76 oder 0x77)
-	•	2× HC-05 Bluetooth-Module (gepairt & vertrauenswürdig)
+	•	2× HC-05 Bluetooth-Module
 
 	Steuerlogik (Kurzüberblick)
 	•	Fallback: CO₂-Wert 0 (Sensorfehler) → 50 %
