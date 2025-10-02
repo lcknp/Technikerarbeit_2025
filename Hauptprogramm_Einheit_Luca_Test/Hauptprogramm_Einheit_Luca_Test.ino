@@ -13,13 +13,14 @@ RTC_DS1307 rtc;                                             //Initialisierung de
 
 //Bib Einbinden
 #include <DHT.h>                                            //Bibliothek für die Sesnoren
+
 //Pin definitionen
 #define DHT_Innen 4                                         //Pin für den inneren Sensor
 #define DHT_Aussen 5                                        //Pin für den äußeren Sensor
+
 //Initialisierung                                            
 DHT dht1(DHT_Innen, DHT22);                                 //Pin und Typ den Sensor zuweisen
 DHT dht2(DHT_Aussen, DHT22);                                //Pin und Typ den Sensor zuweisen
-
 
 //Eigene Bib Einbinden
 #include "zeitanpassung.h"
@@ -45,6 +46,7 @@ long Zeitanpassung = 0;                                     //Variable für die 
 int var_dutyCycle;                                          //Variable für den Duty Cycle
 byte mode = 1;                                              //MODE einstellung 0 = bedarfsorientierte lüftungen / 1 = Push/Pull auto mit intervall
 
+
 //Timing und delays
 unsigned long currentMillis = 0;
 
@@ -52,9 +54,9 @@ const long delaysekunde = 1000;                             //Zeit für Interval
 unsigned long letzteMillis = 0;                             //Variable für Programmdurchlauf
 unsigned long previousMillis = 0;                           //Speichert letzter Wert des durchgangs
 
-long pushpulldelay = 30000;                               //Delay für Push/Pull belüftung 5 min
+long pushpulldelay = 30000;                                 //Delay für Push/Pull belüftung x(millis)
 
-const unsigned long TIMEOUT = 15000;                         //timeout für btdata, d.h. wenn nach x(millis) nichts kommt schält er in mode 1
+const unsigned long TIMEOUT = 60000;                        //timeout für btdata, d.h. wenn nach x(millis) nichts kommt schält er in mode 1
 unsigned long lastReceiveTime = 0;                          //Variable für Letzte zeit die BT Data gesendet wurde
 
 
@@ -62,11 +64,12 @@ unsigned long lastReceiveTime = 0;                          //Variable für Letz
 //Befehlssatz und BT Kommunikation
 //************************************************************************************************************//
 
-String btData = "";                                                   //raw Data
-String strvalue;                                                      //stgvalue -> String Wert der in int konvertiert werden muss.
-String cmd[] = {"day_name", "month", "day", "time", "year", "ctl", "delay"};   //Befehlssatz
-String param;                                                         //<Parameter/Kommand>
-int ctl = 50;                                                         //<Value/Wert>
+String btData = "";                                                                         //raw Data
+String strvalue;                                                                            //stgvalue -> String Wert der in int konvertiert werden muss.
+String cmd[] = {"day_name", "month", "day", "time", "year", "ctl", "delay", "rasp_read"};   //Befehlssatz
+String param;                                                                               //<Parameter/Kommand>
+int ctl = 50;                                                                               //<Value/Wert>
+byte rasp_read = 0;                                                                         //Value wenn Raspberry gesendet hat dass er lesen will
 
 //************************************************************************************************************//
 //Zeitanpassung Raspi
@@ -94,8 +97,6 @@ int cout_timeadj = 0;
 
 void btread(){
 
-    lastReceiveTime = currentMillis;
-  
     btData = Serial.readStringUntil('\n');
     
     int seperator = btData.indexOf('=');
@@ -104,12 +105,11 @@ void btread(){
       param = btData.substring(0, seperator);
       strvalue = btData.substring(seperator + 1);
     }
-    
-    //value = strvalue.toInt();
-    
+       
     if(param == cmd[0]){
         day_name_rasp = strvalue;
       }
+      
     if(param == cmd[1]){
         mon_rasp = strvalue;
         for(int i=0; i < 12; i++){
@@ -118,10 +118,12 @@ void btread(){
           }  
         }
       }
+      
     if(param == cmd[2]){
         tempor = strvalue.toInt();
         if (tempor >= 1 && tempor <= 31) rasp_time[2] = tempor;
       }
+      
     if(param == cmd[3]){
         time_rasp = strvalue;
         String stunden_str = time_rasp.substring(0, 2);
@@ -135,10 +137,12 @@ void btread(){
         if (minuten>= 0 && minuten <= 59) rasp_time[4] = minuten;
         if (sekunden >= 0 && sekunden <= 59) rasp_time[5] = sekunden;
       }
+      
     if(param == cmd[4]){
         tempor = strvalue.toInt();
         if (tempor > 2000) rasp_time[0] = tempor;
       }
+      
     if(param == cmd[5]){
         ctl = strvalue.toInt();
         
@@ -150,11 +154,15 @@ void btread(){
           l = map(ctl, 0, 100, 50, 0);
           k = map(ctl, 0, 100, 50, 100);
           }
-    }      
-      if(param == cmd[6]){
+    }
+          
+    if(param == cmd[6]){
         pushpulldelay = strvalue.toInt();      
     }
-
+    
+    if(param == cmd[7]){  
+      rasp_read = 1;
+    }
 }
 
 //************************************************************************************************************//
@@ -198,58 +206,89 @@ void loop () {
   currentMillis = millis();
 
   if (Serial.available()) {
-    mode = 0; //Wenn Raspi Schickt mode 0 / Bedarfsorientiert
-    btread(); //funktion btread
+    mode = 0;                         //Wenn Raspi Schickt mode 0 / Bedarfsorientiert
+    lastReceiveTime = currentMillis;
+    btread();                         //funktion btread
   }
 
-  //Wenn Raspi nichts mehr sendet Mode umashcalten
-  if (currentMillis - lastReceiveTime > TIMEOUT) { //lastReceiveTime wird in void btread() gesetzt
-    mode = 1;
-    k = 30;
-    l = 70;
-    pushpulldelay = 30000;
+  // Wenn Raspi nichts mehr sendet Mode umschalten
+  if (currentMillis - lastReceiveTime > TIMEOUT) { //lastReceiveTime wird gesetzt wenn Seriell/BT kommt
+    mode = 1;                   //Automatisch mode
+    k = 30;                     //PWM
+    l = 70;                     //PWM
+    pushpulldelay = 30000;      //Zyklus für PushPull automatisch
   } 
 
-  //Zeitjustierung Automatisch wenn Raspi neue Daten liefert
+  // Zeitjustierung Automatisch wenn Raspi neue Daten liefert / überprüft ob die alten Zeit daten mit den Neuen übereinstimmt
   if (mode == 0 && (rasp_time[0] != rasp_time_alt[0] || rasp_time[1] != rasp_time_alt[1] || rasp_time[2] != rasp_time_alt[2] || rasp_time[3] != rasp_time_alt[3] || rasp_time[4] != rasp_time_alt[4]|| rasp_time[5] != rasp_time_alt[5])) {
-    
-    // Übergabe der neuen Zeit
+
+    // Zeit wird nur neu gesetzt wenn der Raspi neue Zeit liefert
+    // Übergabe der neuen Zeit Gelesen und setzten über die funktion
     raspi_zeitanpassung(rasp_time[0], rasp_time[1], rasp_time[2], rasp_time[3], rasp_time[4], rasp_time[5]);
 
     // Alte Zeit speichern
     for (int i = 0; i < 6; i++) {
         rasp_time_alt[i] = rasp_time[i];
     }
-    cout_timerasp++;
+    cout_timerasp++; //Zähler für Wie viele zeitanpassungen gemacht worden sind
   }
 
-  //Wöchentliche Zeitjustierung, um Abweichungen des RTC-Moduls zu korrigieren wenn der Raspi nichts Sendet
+  // Wöchentliche Zeitjustierung, um Abweichungen des RTC-Moduls zu korrigieren wenn der Raspi nichts Sendet
   if (mode == 0 && Zeitanpassung >= 604800000) {
       Zeitanpassung = zeitanpassung_auto(Zeitanpassung);
       cout_timeadj++;
   }
 
-  if (currentMillis - previousMillis >= delaysekunde) {
-    previousMillis = currentMillis;
-    Zeitanpassung++;
-    Serial.println("Mode:          " + String(mode));
-    Serial.println("Fan:           " + String(ctl));
-    Serial.println("bttime:        " + 
-                   String(rasp_time[0]) + " " + 
-                   String(rasp_time[1]) + " " + 
-                   String(rasp_time[2]) + " " + 
-                   String(rasp_time[3]) + " " + 
-                   String(rasp_time[4]) + " " + 
-                   String(rasp_time[5]));
-    Serial.println("cout_timerasp: " + String(cout_timerasp));
-    Datum_Zeit_ausgabe();                                                             // Funktionsaufruf zur Ausgabe des aktuellen Datums und der aktuellen Uhrzeit
-    Serial.println("----------------------------------------------------------------------------------");
-    Serial.print("unit=");
-    Serial.println(einheit);
-    Drehzahl_berechnung(var_dutyCycle);                                               // Funktionsaufruf zur Drehzahlberechnung
-    Einmalige_Zeitanpassung();                                                        // Einmalige Zeitjustierung nach Programmstart
-    var_dutyCycle = Luefter_ansteuerung(k, l, pushpulldelay);                             // Funktionsaufruf zur Zeitabhängigen Lüfteransteuerung
-    Sensor_auswertung();                                                              // Funktionsaufruf zur Ausgabe der aktuellen Temperatur und Feuchtigkeit
-    Serial.println("----------------------------------------------------------------------------------");
+  // Bedarfsorientiert / Schreibt seriell nur wenn Raspberry es verlangt / Achtung aufpassen bei wenn man mit dem Raspi datenlesen hochgeht auf den TIMEOUT
+  if(mode == 0){
+    if(rasp_read == 1){
+      rasp_read = 0;      
+      Serial.println("Mode:          " + String(mode));
+      Serial.println("Fan:           " + String(ctl));
+      Serial.println("bttime:        " + 
+                     String(rasp_time[0]) + " " + 
+                     String(rasp_time[1]) + " " + 
+                     String(rasp_time[2]) + " " + 
+                     String(rasp_time[3]) + " " + 
+                     String(rasp_time[4]) + " " + 
+                     String(rasp_time[5]));
+      Serial.println("cout_timerasp: " + String(cout_timerasp));
+      Datum_Zeit_ausgabe();                                                             // Funktionsaufruf zur Ausgabe des aktuellen Datums und der aktuellen Uhrzeit
+      Serial.println("----------------------------------------------------------------------------------");
+      Serial.print("unit=");
+      Serial.println(einheit);
+      Drehzahl_berechnung(var_dutyCycle);                                               // Funktionsaufruf zur Drehzahlberechnung
+      Einmalige_Zeitanpassung();                                                        // Einmalige Zeitjustierung nach Programmstart
+      var_dutyCycle = Luefter_ansteuerung(k, l, pushpulldelay, mode);                             // Funktionsaufruf zur Zeitabhängigen Lüfteransteuerung
+      Sensor_auswertung();                                                              // Funktionsaufruf zur Ausgabe der aktuellen Temperatur und Feuchtigkeit
+      Serial.println("----------------------------------------------------------------------------------");
+    }
+  }
+
+  // Automatisch / schreibt alle Sekunden Seriell
+  if(mode == 1){
+    if (currentMillis - previousMillis >= delaysekunde) {
+      previousMillis = currentMillis;
+      Zeitanpassung++;
+      Serial.println("Mode:          " + String(mode));
+      Serial.println("Fan:           " + String(ctl));
+      Serial.println("bttime:        " + 
+                     String(rasp_time[0]) + " " + 
+                     String(rasp_time[1]) + " " + 
+                     String(rasp_time[2]) + " " + 
+                     String(rasp_time[3]) + " " + 
+                     String(rasp_time[4]) + " " + 
+                     String(rasp_time[5]));
+      Serial.println("cout_timerasp: " + String(cout_timerasp));
+      Datum_Zeit_ausgabe();                                                             // Funktionsaufruf zur Ausgabe des aktuellen Datums und der aktuellen Uhrzeit
+      Serial.println("----------------------------------------------------------------------------------");
+      Serial.print("unit=");
+      Serial.println(einheit);
+      Drehzahl_berechnung(var_dutyCycle);                                               // Funktionsaufruf zur Drehzahlberechnung
+      Einmalige_Zeitanpassung();                                                        // Einmalige Zeitjustierung nach Programmstart
+      var_dutyCycle = Luefter_ansteuerung(k, l, pushpulldelay, mode);                             // Funktionsaufruf zur Zeitabhängigen Lüfteransteuerung
+      Sensor_auswertung();                                                              // Funktionsaufruf zur Ausgabe der aktuellen Temperatur und Feuchtigkeit
+      Serial.println("----------------------------------------------------------------------------------");
+    }
   }
 }
