@@ -77,16 +77,17 @@ data_points = 9
 # device_data automatisch generieren
 device_data = [[0] * data_points for _ in HC05S]
 
-hc05lib.start_all(HC05S)
-time.sleep(5) #Warte bis HC05 bereit ist
-
 # Variablen für BT-Daten
 
 cmd_read = ["unit=", "btdata=", "speed=", "cycle=", "period=", "temp_out=", "humi_out=", "temp_in=", "humi_in="]
 
-cmd_write = ["day_name", "month", "day", "time", "year", "ctl", "delay", "rasp_read"]
+cmd_write = ["day_name", "month", "day", "time", "year", "ctl", "toggle", "rasp_read"]
 
 fan_percent = 0
+
+hc05lib.start_all(HC05S)
+time.sleep(5) #Warte bis HC05 bereit ist
+
 
 # ------------------------------
 # Sensor-Setup
@@ -103,6 +104,7 @@ bme280.sea_level_pressure = 1000                  # Sealevel
 delay = 0
 delay_time_send = 0
 datasafedelay = 0
+push_pull_delay = 0
 
 co2 = pasco2.pasco2init()
 
@@ -133,12 +135,12 @@ try:
         if jetzt >= delay:      
             delay = jetzt + 1   # + x Sekunden
 
-            jetzt = time.localtime()
+            uhrzeit_prüf = time.localtime()
 
-            wochentag = jetzt.tm_wday  # Montag = 0, Sonntag = 6
-            stunde = jetzt.tm_hour     # 0 bis 23
+            wochentag = uhrzeit_prüf.tm_wday  # Montag = 0, Sonntag = 6
+            stunde = uhrzeit_prüf.tm_hour     # 0 bis 23
 
-            if wochentag < 5:  # Montag bis Freitag
+            if wochentag < 6:  # Montag bis Freitag
                 if 6 <= stunde < 18:
                     hc05lib.writedata(HC05S, cmd_write, co2)  #Lüfterstufe an alle Geräte senden
                 elif 4 <= stunde < 6:
@@ -166,7 +168,8 @@ try:
 
             data = {"ts": uhrzeit, "co2": co2, "t": temp, "h": humi, "p": pressure,
                     "device1": device_data[0][0], "tempinnen1": device_data[0][5], "huminnen1": device_data[0][6], "tempaussen1": device_data[0][7], "humaussen1": device_data[0][8], "drehzahl1": device_data[0][2], "periode1": device_data[0][4],
-                    "device2": device_data[1][0], "tempinnen2": device_data[1][5], "huminnen2": device_data[1][6], "tempaussen2": device_data[1][7], "humaussen2": device_data[1][8], "drehzahl2": device_data[1][2], "periode2": device_data[1][4],
+                    #"device2": device_data[1][0], "tempinnen2": device_data[1][5], "huminnen2": device_data[1][6], "tempaussen2": device_data[1][7], "humaussen2": device_data[1][8], "drehzahl2": device_data[1][2], "periode2": device_data[1][4],
+                    
                     }
                     
             write_json(data)  # für Website
@@ -181,8 +184,38 @@ try:
                 datasafedelay = 0    
             #Speichern in der DB (Tabelle je Monat)
 
-            hc05lib.send_to_device(HC05S[0], f"{cmd_write[7]}=")
-            hc05lib.send_to_device(HC05S[1], f"{cmd_write[7]}=")
+            for i in range(len(HC05S)):
+
+                #Push-Pull Steuerung
+                if float(device_data[0][5]) < 20:   #Aussentemperatur kleiner als 20
+                    if float(device_data[0][7]) > 24:   #Innentemperatur grösser als 24
+                        direction = 0
+                    if float(device_data[0][7]) < 18:   #Innentemperatur kleiner als 18
+                        direction = 1
+
+                #Durchzug bei angenehmen Temperaturen
+                if float(device_data[0][5]) > 20 and float(device_data[i][5]) < 27:
+                        direction = 0 #durchzug
+
+                #Kein Durchzug bei zu hohen Aussentemperaturen
+                #Kurze Zykluszeiten
+                if jetzt >= push_pull_delay:      
+                    push_pull_delay = jetzt + 50   # + x Sekunden
+                    if float(device_data[0][5]) > 27:
+                        direction = direction + 1  # 1=Push, 0=Pull
+                        if direction > 1:
+                            direction = 0
+
+
+                if direction == 1:
+                    dir_send = "1" if (i % 2 == 1) else "0"   # gerade=1, ungerade=0
+                else:
+                    dir_send = "0" if (i % 2 == 1) else "1"   # gerade=0, ungerade=1
+                
+                hc05lib.send_to_device(HC05S[i], f"{cmd_write[6]}={dir_send}")
+
+            for i in range(len(HC05S)):
+                hc05lib.send_to_device(HC05S[i], f"{cmd_write[7]}=")
 
         # BT-Daten von den Einheiten lesen
 
@@ -191,6 +224,7 @@ try:
         # Zeit-Sync an die Einheiten senden
 
         hc05lib.time_sync(HC05S, cmd_write)
+
         
 
 except KeyboardInterrupt:
