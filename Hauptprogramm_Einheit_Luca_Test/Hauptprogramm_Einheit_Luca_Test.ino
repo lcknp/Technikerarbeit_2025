@@ -32,7 +32,7 @@ DHT dht2(DHT_Aussen, DHT22);                                //Pin und Typ den Se
 
 
 //Nummer der Einheit//
-byte einheit = 2;
+byte einheit = 1;
 //******************//
 
 //************************************************************************************************************//
@@ -55,6 +55,7 @@ unsigned long letzteMillis = 0;                             //Variable für Prog
 unsigned long previousMillis = 0;                           //Speichert letzter Wert des durchgangs
 
 long pushpulldelay = 30000;                                 //Delay für Push/Pull belüftung x(millis)
+byte toggle = 0;
 
 const unsigned long TIMEOUT = 60000;                        //timeout für btdata, d.h. wenn nach x(millis) nichts kommt schält er in mode 1
 unsigned long lastReceiveTime = 0;                          //Variable für Letzte zeit die BT Data gesendet wurde
@@ -64,12 +65,12 @@ unsigned long lastReceiveTime = 0;                          //Variable für Letz
 //Befehlssatz und BT Kommunikation
 //************************************************************************************************************//
 
-String btData = "";                                                                         //raw Data
-String strvalue;                                                                            //stgvalue -> String Wert der in int konvertiert werden muss.
-String cmd[] = {"day_name", "month", "day", "time", "year", "ctl", "delay", "rasp_read"};   //Befehlssatz
-String param;                                                                               //<Parameter/Kommand>
-int ctl = 50;                                                                               //<Value/Wert>
-byte rasp_read = 0;                                                                         //Value wenn Raspberry gesendet hat dass er lesen will
+String btData = "";                                                                                 //raw Data
+String strvalue;                                                                                    //stgvalue -> String Wert der in int konvertiert werden muss.
+String cmd[] = {"day_name", "month", "day", "time", "year", "ctl", "toggle", "rasp_read"};    //Befehlssatz
+String param;                                                                                       //<Parameter/Kommand>
+int ctl = 50;                                                                                       //<Value/Wert>
+byte rasp_read = 0;                                                                                 //Value wenn Raspberry gesendet hat dass er lesen will
 
 //************************************************************************************************************//
 //Zeitanpassung Raspi
@@ -157,7 +158,7 @@ void btread(){
     }
           
     if(param == cmd[6]){
-        pushpulldelay = strvalue.toInt();      
+        toggle = strvalue.toInt();      
     }
     
     if(param == cmd[7]){  
@@ -259,7 +260,7 @@ void loop () {
       Serial.println(einheit);
       Drehzahl_berechnung(var_dutyCycle);                                               // Funktionsaufruf zur Drehzahlberechnung
       Einmalige_Zeitanpassung();                                                        // Einmalige Zeitjustierung nach Programmstart
-      var_dutyCycle = Luefter_ansteuerung(k, l, pushpulldelay, mode);                             // Funktionsaufruf zur Zeitabhängigen Lüfteransteuerung
+      var_dutyCycle = Luefter_ansteuerung_mode(k, l, toggle);                           // Funktionsaufruf zur Zeitabhängigen Lüfteransteuerung
       Sensor_auswertung();                                                              // Funktionsaufruf zur Ausgabe der aktuellen Temperatur und Feuchtigkeit
       Serial.println("----------------------------------------------------------------------------------");
     }
@@ -286,7 +287,7 @@ void loop () {
       Serial.println(einheit);
       Drehzahl_berechnung(var_dutyCycle);                                               // Funktionsaufruf zur Drehzahlberechnung
       Einmalige_Zeitanpassung();                                                        // Einmalige Zeitjustierung nach Programmstart
-      var_dutyCycle = Luefter_ansteuerung(k, l, pushpulldelay, mode);                             // Funktionsaufruf zur Zeitabhängigen Lüfteransteuerung
+      var_dutyCycle = Luefter_ansteuerung_auto(k, l, pushpulldelay);                         // Funktionsaufruf zur Zeitabhängigen Lüfteransteuerung
       Sensor_auswertung();                                                              // Funktionsaufruf zur Ausgabe der aktuellen Temperatur und Feuchtigkeit
       Serial.println("----------------------------------------------------------------------------------");
     }

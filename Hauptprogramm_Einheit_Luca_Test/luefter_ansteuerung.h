@@ -46,7 +46,7 @@ int Drehzahl_berechnung(int dutyCycle) {
 
 //********************************************************************************************************************************************
 
-int Luefter_ansteuerung(int k, int l, const long pushpulldelay, byte mode) {
+int Luefter_ansteuerung_auto(int k, int l, const long pushpulldelay){
   DateTime now = rtc.now(); //Hole die aktuelle Zeit vom RTC-Modul
 
   static int z = 50; //Variable für Periode aber static das heist im programm veränderbar
@@ -62,7 +62,6 @@ int Luefter_ansteuerung(int k, int l, const long pushpulldelay, byte mode) {
   byte a = now.hour();
   byte wochentag = now.dayOfTheWeek();
 
-  if(mode == 1){
     if ((wochentag >= 1 && wochentag <= 5) && (a >= 6 && a <= 17)) {
         if (toggle) {
           z = k;
@@ -80,9 +79,18 @@ int Luefter_ansteuerung(int k, int l, const long pushpulldelay, byte mode) {
     else {
       z = 50;
     }
-  }
+  
+  int var_dutyCycle = dutycycle(z); // Zahl gibt die Laufrichtung des Lüfters an
+  OCR1A = map(var_dutyCycle, 0, 255, 0, ICR1);
+  return var_dutyCycle;
+}
 
-  if(mode == 0){
+//********************************************************************************************************************************************
+
+int Luefter_ansteuerung_mode(int k, int l, int toggle){
+
+  static int z = 50; //Variable für Periode aber static das heist im programm veränderbar
+  
     if (toggle) {
           z = k;
           //Serial.println("zuluft");
@@ -92,8 +100,7 @@ int Luefter_ansteuerung(int k, int l, const long pushpulldelay, byte mode) {
           //Serial.println("abluft");
           //lastData = l;
         }
-  }
-  
+
   int var_dutyCycle = dutycycle(z); // Zahl gibt die Laufrichtung des Lüfters an
   OCR1A = map(var_dutyCycle, 0, 255, 0, ICR1);
   return var_dutyCycle;
