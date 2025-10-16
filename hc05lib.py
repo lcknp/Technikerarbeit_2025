@@ -275,28 +275,65 @@ def readdata(HC05S, cmd_read, cmd_write, device_data):
                             )
     return device_data
 
-def writedata(HC05S, cmd_write, co2):
+push_pull_delay = 0 #Globale Variable für writedata
+direction = 0
+def writedata(HC05S, cmd_write, raspi_data, device_data):
     """
     Enscheidet wie hoch die Lüfterstufe ist und
     Schreibt die Lüfterstufe an alle Geräte
+    Steuert auch die Laufrichtung
     """
+    global push_pull_delay
+    global direction
+    jetzt = time.time()
+
     for p in range(len(HC05S)):
-        if co2 == 0:
+        if raspi_data[0] == 0:
             # Sensorfehler ? Fallback
             fan_percent = 30
 
-        elif co2 < 700:
+        elif raspi_data[0] < 700:
             fan_percent = 30  # Minimalbetrieb
 
-        elif 700 <= co2 < 1200:
+        elif 700 <= raspi_data[0] < 1200:
             # Lüfterleistung steigt linear zwischen 25..85 %
-            fan_percent = 25 + (co2 - 700) * (60 / 500)
+            fan_percent = 25 + (raspi_data[0] - 700) * (60 / 500)
 
-        elif co2 >= 1200:
+        elif raspi_data[0] >= 1200:
             fan_percent = 90   # Vollgas
         
         # Lüfterstufe an die Einheit senden
         send_to_device(HC05S[p], f"{cmd_write[5]}={fan_percent}")
+    
+    for i in range(len(HC05S)):
+
+        #Push-Pull Steuerung
+        if float(device_data[0][5]) < 20:   #Aussentemperatur kleiner als 20
+            if float(device_data[0][7]) > 24:   #Innentemperatur grösser als 24
+                direction = 0
+            if float(device_data[0][7]) < 18:   #Innentemperatur kleiner als 18
+                direction = 1
+
+        #Durchzug bei angenehmen Temperaturen
+        if float(device_data[0][5]) > 20 and float(device_data[i][5]) < 27:
+            direction = 0 #durchzug
+
+        #Kein Durchzug bei zu hohen Aussentemperaturen
+        #Kurze Zykluszeiten
+        if jetzt >= push_pull_delay:      
+            push_pull_delay = jetzt + 50   # + x Sekunden
+            if float(device_data[0][5]) > 27:
+                direction = direction + 1  # 1=Push, 0=Pull
+                if direction > 1:
+                    direction = 0
+
+
+        if direction == 1:
+            dir_send = "1" if (i % 2 == 1) else "0"   # gerade=1, ungerade=0
+        else:
+            dir_send = "0" if (i % 2 == 1) else "1"   # gerade=0, ungerade=1
+                
+        send_to_device(HC05S[i], f"{cmd_write[6]}={dir_send}")
 
 def write_off(HC05S, cmd_write):
     """

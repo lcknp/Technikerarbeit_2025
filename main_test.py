@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-#  Test.py
 #  Luca Knapp
 
 #Eigene Imports
@@ -77,17 +75,16 @@ data_points = 9
 # device_data automatisch generieren
 device_data = [[0] * data_points for _ in HC05S]
 
+raspi_data = [0,0,0,0,0]
+
 # Variablen für BT-Daten
 
 cmd_read = ["unit=", "btdata=", "speed=", "cycle=", "period=", "temp_out=", "humi_out=", "temp_in=", "humi_in="]
 
 cmd_write = ["day_name", "month", "day", "time", "year", "ctl", "toggle", "rasp_read"]
 
-fan_percent = 0
-
 hc05lib.start_all(HC05S)
 time.sleep(5) #Warte bis HC05 bereit ist
-
 
 # ------------------------------
 # Sensor-Setup
@@ -104,7 +101,6 @@ bme280.sea_level_pressure = 1000                  # Sealevel
 delay = 0
 delay_time_send = 0
 datasafedelay = 0
-push_pull_delay = 0
 
 co2 = pasco2.pasco2init()
 
@@ -112,6 +108,50 @@ def write_json(d):
     TMP.write_text(json.dumps(d, ensure_ascii=False))
     os.replace(TMP, OUT)
     
+old_raspi_data = [0, 0, 0, 0, 0]
+def raspi_readdata():
+    global old_raspi_data
+
+    # Starte mit den alten Werten
+    raspi_data = old_raspi_data.copy()
+
+    raspi_data[0] = pasco2.read_co2()
+    
+    try:
+        raspi_data[1] = bme280.temperature
+        raspi_data[2] = bme280.humidity
+        raspi_data[3] = bme280.pressure
+        raspi_data[4] = bme280.altitude
+    except OSError:
+        print("BME280 Fehler")
+
+    old_raspi_data = raspi_data.copy()
+    return raspi_data
+
+def build_web_payload(uhrzeit, raspi_data, device_data):
+    payload = {
+        "ts": uhrzeit,
+        "co2": raspi_data[0],
+        "t": raspi_data[1],
+        "h": raspi_data[2],
+        "p": raspi_data[3],
+    }
+
+    # Für jedes Gerät in der Liste device_data hinzufügen
+    for i, dev in enumerate(device_data, start=1):
+        payload.update({
+            f"device{i}": dev[0],
+            f"tempinnen{i}": dev[5],
+            f"huminnen{i}": dev[6],
+            f"tempaussen{i}": dev[7],
+            f"humaussen{i}": dev[8],
+            f"drehzahl{i}": dev[2],
+            f"periode{i}": dev[4],
+        })
+
+    return payload
+
+
 # ------------------------------
 # Hauptschleife
 # ------------------------------
@@ -121,16 +161,7 @@ try:
         uhrzeit = time.ctime(time.time())
         jetzt = time.time()
 
-        co2 = pasco2.read_co2()
-
-        try:
-            temp = bme280.temperature
-            humi = bme280.humidity
-            pressure = bme280.pressure
-            altitude = bme280.altitude
-        except OSError: # I2C Fehler
-            print("BME280 Fehler")
-            None
+        raspi_data = raspi_readdata()
 
         if jetzt >= delay:      
             delay = jetzt + 1   # + x Sekunden
@@ -140,22 +171,25 @@ try:
             wochentag = uhrzeit_prüf.tm_wday  # Montag = 0, Sonntag = 6
             stunde = uhrzeit_prüf.tm_hour     # 0 bis 23
 
-            if wochentag < 6:  # Montag bis Freitag
+            # Sendet Laufrichtung an die Einheiten
+            # Lüfterstufe an alle Geräte senden
+            # 1 = Montag bis 5 = Freitag
+            if wochentag < 6:  
                 if 6 <= stunde < 18:
-                    hc05lib.writedata(HC05S, cmd_write, co2)  #Lüfterstufe an alle Geräte senden
+                    hc05lib.writedata(HC05S, cmd_write, raspi_data, device_data)  
                 elif 4 <= stunde < 6:
-                    hc05lib.writedata(HC05S, cmd_write, co2)  #Lüfterstufe an alle Geräte senden
+                    hc05lib.writedata(HC05S, cmd_write, raspi_data, device_data)  
                 else:
                     hc05lib.write_off(HC05S, cmd_write)
             else:
                 hc05lib.write_off(HC05S, cmd_write)
 
             print(uhrzeit)
-            print(f"CO2: {co2:.2f} ppm")
-            print(f"Temperature: {temp:.1f} C")
-            print(f"Humidity:    {humi:.1f} %")
-            print(f"Pressure:    {pressure:.1f} hPa")
-            print(f"Altitude:    {altitude:.2f} m\n")
+            print(f"CO2: {raspi_data[0]:.2f} ppm")
+            print(f"Temperature: {raspi_data[1]:.1f} C")
+            print(f"Humidity:    {raspi_data[2]:.1f} %")
+            print(f"Pressure:    {raspi_data[3]:.1f} hPa")
+            print(f"Altitude:    {raspi_data[4]:.2f} m\n")
             
             for i in range(len(HC05S)):
                 print(f"Einheit:        {device_data[i][0]}")
@@ -166,54 +200,17 @@ try:
                 print(f"Drehzahl:       {device_data[i][2]} U/min")
                 print(f"Periode:        {device_data[i][4]}\n")
 
-            data = {"ts": uhrzeit, "co2": co2, "t": temp, "h": humi, "p": pressure,
-                    "device1": device_data[0][0], "tempinnen1": device_data[0][5], "huminnen1": device_data[0][6], "tempaussen1": device_data[0][7], "humaussen1": device_data[0][8], "drehzahl1": device_data[0][2], "periode1": device_data[0][4],
-                    #"device2": device_data[1][0], "tempinnen2": device_data[1][5], "huminnen2": device_data[1][6], "tempaussen2": device_data[1][7], "humaussen2": device_data[1][8], "drehzahl2": device_data[1][2], "periode2": device_data[1][4],
-                    
-                    }
-                    
-            write_json(data)  # für Website
+            # Erstellt ein Dict und schreibt es in eine JSON Datei
+            data = build_web_payload(uhrzeit, raspi_data, device_data)
+            write_json(data)
             
+            # Speichern in der DB
             datasafedelay = datasafedelay + 1 
             if datasafedelay >= 1: # alle Sekunde
-                funktion_db.databasesafe("raspi", uhrzeit, round(co2, 2), round(temp, 2), round(humi, 2), round(pressure, 2), 0, 0, 0, 0)
-                for idx, row in enumerate(device_data): # schaut ob Daten vorhanden sind
-                    if row and all(row[i] not in (None, "", 0) for i in (0, 4, 6, 7, 8)):
-                        funktion_db.databasesafe(   f"ardu{row[0]}", uhrzeit, 0, 0, 0, row[4], row[7], row[8], row[5], row[6]
-                        )
+                funktion_db.save_to_db(uhrzeit, raspi_data, device_data)
                 datasafedelay = 0    
-            #Speichern in der DB (Tabelle je Monat)
-
-            for i in range(len(HC05S)):
-
-                #Push-Pull Steuerung
-                if float(device_data[0][5]) < 20:   #Aussentemperatur kleiner als 20
-                    if float(device_data[0][7]) > 24:   #Innentemperatur grösser als 24
-                        direction = 0
-                    if float(device_data[0][7]) < 18:   #Innentemperatur kleiner als 18
-                        direction = 1
-
-                #Durchzug bei angenehmen Temperaturen
-                if float(device_data[0][5]) > 20 and float(device_data[i][5]) < 27:
-                        direction = 0 #durchzug
-
-                #Kein Durchzug bei zu hohen Aussentemperaturen
-                #Kurze Zykluszeiten
-                if jetzt >= push_pull_delay:      
-                    push_pull_delay = jetzt + 50   # + x Sekunden
-                    if float(device_data[0][5]) > 27:
-                        direction = direction + 1  # 1=Push, 0=Pull
-                        if direction > 1:
-                            direction = 0
-
-
-                if direction == 1:
-                    dir_send = "1" if (i % 2 == 1) else "0"   # gerade=1, ungerade=0
-                else:
-                    dir_send = "0" if (i % 2 == 1) else "1"   # gerade=0, ungerade=1
-                
-                hc05lib.send_to_device(HC05S[i], f"{cmd_write[6]}={dir_send}")
-
+            
+            # Schreibt je nach Intervall die Einheiten an um Daten zu lesesn
             for i in range(len(HC05S)):
                 hc05lib.send_to_device(HC05S[i], f"{cmd_write[7]}=")
 

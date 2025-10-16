@@ -11,6 +11,14 @@
 import pymysql
 import time
 
+def save_to_db(uhrzeit, raspi_data, device_data):
+    databasesafe("raspi", uhrzeit, round(raspi_data[0], 2), round(raspi_data[1], 2), round(raspi_data[2], 2), round(raspi_data[3], 2), 0, 0, 0, 0)
+    
+    for idx, row in enumerate(device_data): # schaut ob Daten vorhanden sind
+        if row and all(row[i] not in (None, "", 0) for i in (0, 4, 6, 7, 8)):
+            databasesafe(   f"ardu{row[0]}", uhrzeit, 0, 0, 0, row[4], row[7], row[8], row[5], row[6]
+            )
+
 def databasesafe(device, uhrzeit, co2=None, temp=None, humi=None, pressure=None, temp_in=None, humi_in=None, temp_out=None, humi_out=None):
     """
     Speichert Messwerte in einer Monats-Tabelle (Messungen_YYYYMM).
