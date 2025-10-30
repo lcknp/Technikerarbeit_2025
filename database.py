@@ -12,14 +12,14 @@ import pymysql
 import time
 
 def save_to_db(uhrzeit, raspi_data, device_data):
-    databasesafe("raspi", uhrzeit, round(raspi_data[0], 2), round(raspi_data[1], 2), round(raspi_data[2], 2), round(raspi_data[3], 2), 0, 0, 0, 0)
+    databasesafe("raspi", uhrzeit, round(raspi_data[0], 2), round(raspi_data[1], 2), round(raspi_data[2], 2), round(raspi_data[3], 2), 0, 0, 0, 0, 0)
     
     for idx, row in enumerate(device_data): # schaut ob Daten vorhanden sind
         if row and all(row[i] not in (None, "", 0) for i in (0, 4, 6, 7, 8)):
-            databasesafe(   f"ardu{row[0]}", uhrzeit, 0, 0, 0, row[4], row[7], row[8], row[5], row[6]
+            databasesafe(   f"ardu{row[0]}", uhrzeit, 0, 0, 0, 0, row[7], row[8], row[5], row[6], row[4]
             )
 
-def databasesafe(device, uhrzeit, co2=None, temp=None, humi=None, pressure=None, temp_in=None, humi_in=None, temp_out=None, humi_out=None):
+def databasesafe(device, uhrzeit, co2=None, temp=None, humi=None, pressure=None, temp_in=None, humi_in=None, temp_out=None, humi_out=None, pwm=None):
     """
     Speichert Messwerte in einer Monats-Tabelle (Messungen_YYYYMM).
     - uhrzeit: String im Format "%a %b %d %H:%M:%S %Y"
@@ -60,7 +60,8 @@ def databasesafe(device, uhrzeit, co2=None, temp=None, humi=None, pressure=None,
             temp_in DOUBLE NULL,
             humi_in DOUBLE NULL,
             temp_out DOUBLE NULL,
-            humi_out DOUBLE NULL
+            humi_out DOUBLE NULL,
+            pwm DOUBLE NULL
         )
     """
     cur.execute(create_sql)
@@ -68,8 +69,8 @@ def databasesafe(device, uhrzeit, co2=None, temp=None, humi=None, pressure=None,
     #Datensatz speichern
     insert_sql = f"""
         INSERT INTO {table_name}
-        (uhrzeit, device, co2, temp, humi, pressure, temp_in, humi_in, temp_out, humi_out)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        (uhrzeit, device, co2, temp, humi, pressure, temp_in, humi_in, temp_out, humi_out, pwm)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON DUPLICATE KEY UPDATE
             co2=VALUES(co2),
             temp=VALUES(temp),
@@ -78,9 +79,10 @@ def databasesafe(device, uhrzeit, co2=None, temp=None, humi=None, pressure=None,
             temp_in=VALUES(temp_in),
             humi_in=VALUES(humi_in),
             temp_out=VALUES(temp_out),
-            humi_out=VALUES(humi_out);
+            humi_out=VALUES(humi_out),
+            pwm=VALUES(pwm);
     """
-    cur.execute(insert_sql, (uhrzeit, device, co2, temp, humi, pressure, temp_in, humi_in, temp_out, humi_out))
+    cur.execute(insert_sql, (uhrzeit, device, co2, temp, humi, pressure, temp_in, humi_in, temp_out, humi_out, pwm))
     print(f"Daten gespeichert in {table_name}!\n")
 
     # Verbindung schließen

@@ -200,7 +200,7 @@ def read_from_device(mac_address, timeout: float = READ_TIMEOUT_S) -> str | None
         return None
 
     try:
-        # timeout 0.0 verursacht Disconnects -> lieber minimalen Wert nehmen
+        # timeout 0.0 verursacht Disconnects
         if timeout is None or timeout <= 0.0:
             timeout = 0.05
         sock.settimeout(timeout)
@@ -275,72 +275,117 @@ def readdata(HC05S, cmd_read, cmd_write, device_data):
                             )
     return device_data
 
-push_pull_delay = 0 #Globale Variable für writedata
+# ---- Globale Variablen ----
+push_pull_delay = 0          # für >20°C-Parität
 direction = 0
+master_cmd = "0"             # 0=aufladen, 1=entladen (Startzustand)
+prev_master_cmd = None
+delayed_until = []           # pro Einheit Nachlauf-Endzeit (Sekunden-Timestamp)
+
 def writedata(HC05S, cmd_write, raspi_data, device_data):
     """
     Enscheidet wie hoch die Lüfterstufe ist und
     Schreibt die Lüfterstufe an alle Geräte
     Steuert auch die Laufrichtung
     """
-    global push_pull_delay
-    global direction
+    global push_pull_delay, direction, master_cmd, prev_master_cmd, delayed_until
+
+    # sicherstellen, dass delayed_until zur Anzahl passt
+    if len(delayed_until) != len(HC05S):
+        delayed_until = [0.0] * len(HC05S)
+
     jetzt = time.time()
 
+    # --- Lüfterleistung nach CO2 ´ ---
     for p in range(len(HC05S)):
-        if raspi_data[0] == 0:
-            # Sensorfehler ? Fallback
-            fan_percent = 30
-
-        elif raspi_data[0] < 700:
-            fan_percent = 30  # Minimalbetrieb
-
-        elif 700 <= raspi_data[0] < 1200:
-            # Lüfterleistung steigt linear zwischen 25..85 %
-            fan_percent = 25 + (raspi_data[0] - 700) * (60 / 500)
-
-        elif raspi_data[0] >= 1200:
-            fan_percent = 90   # Vollgas
-        
-        # Lüfterstufe an die Einheit senden
+        if raspi_data[0] < 400:
+            fan_percent = 1
+        elif 400 <= raspi_data[0] < 1200:
+            fan_percent = 20 + (raspi_data[0] - 400) * 0.0875
+        else:
+            fan_percent = 90
         send_to_device(HC05S[p], f"{cmd_write[5]}={fan_percent}")
-    
+
     for i in range(len(HC05S)):
 
-        #Push-Pull Steuerung
-        if float(device_data[0][5]) < 20:   #Aussentemperatur kleiner als 20
-            if float(device_data[0][7]) > 24:   #Innentemperatur grösser als 24
-                direction = 0
-            if float(device_data[0][7]) < 18:   #Innentemperatur kleiner als 18
-                direction = 1
+        # -----------------------
+        # Push-Pull Steuerung ( < 20°C: Wärmerückgewinnung + Nachlauf )
+        # -----------------------
+        if float(device_data[0][5]) < 20:   # Außentemperatur kleiner als 20
 
-        #Durchzug bei angenehmen Temperaturen
-        if float(device_data[0][5]) > 20 and float(device_data[i][5]) < 27:
-            direction = 0 #durchzug
+            if i == 0:
+                # --- MASTER ---
+                tM = float(device_data[0][7])
+                Schaltschwelle = raspi_data[1] - 3.0   # Schaltschwelle = Innentemp - 2°C
 
-        #Kein Durchzug bei zu hohen Aussentemperaturen
-        #Kurze Zykluszeiten
-        if jetzt >= push_pull_delay:      
-            push_pull_delay = jetzt + 50   # + x Sekunden
-            if float(device_data[0][5]) > 27:
-                direction = direction + 1  # 1=Push, 0=Pull
-                if direction > 1:
-                    direction = 0
+                # Master entscheidet
+                if tM > Schaltschwelle:
+                    master_cmd = "1"   # entladen
+                elif tM < 17.0:
+                    master_cmd = "0"   # aufladen
 
+                # an Master senden
+                send_to_device(HC05S[0], f"{cmd_write[6]}={master_cmd}")
 
-        if direction == 1:
-            dir_send = "1" if (i % 2 == 1) else "0"   # gerade=1, ungerade=0
-        else:
-            dir_send = "0" if (i % 2 == 1) else "1"   # gerade=0, ungerade=1
-                
-        send_to_device(HC05S[i], f"{cmd_write[6]}={dir_send}")
+                # Richtungswechsel -> Nachlaufzeit für alle Slaves starten
+                if (prev_master_cmd is None) or (master_cmd != prev_master_cmd):
+                    for j in range(1, len(HC05S)):
+                        delayed_until[j] = jetzt + 120
+                    prev_master_cmd = master_cmd
+
+            else:
+                # --- SLAVES ---
+                tS = float(device_data[i][7])
+
+                # Standard: Gegenphase zum Master
+                if master_cmd == "1":
+                    slave_cmd = "0"
+                else:
+                    slave_cmd = "1"
+
+                # Nachlauf: weiter aufladen (0), solange Nachlaufzeit aktiv UND Schwelle nicht erreicht
+                if (tS < Schaltschwelle) and (jetzt < delayed_until[i]):
+                    slave_cmd = "0"
+                else:
+                    # Sobald Schwelle erreicht oder Nachlauf vorbei -> Nachlauf beenden
+                    delayed_until[i] = 0
+
+                # Befehl an Slave senden
+                send_to_device(HC05S[i], f"{cmd_write[6]}={slave_cmd}")
+
+                # -----------------------
+                # Durchzug bei angenehmen Temperaturen
+                # -----------------------
+                if float(device_data[0][5]) > 20 and float(device_data[i][5]) < 27:
+                    direction = 0  # durchzug
+
+                # -----------------------
+                # zu hohen Aussentemperaturen – kurze Zykluszeiten 
+                # -----------------------
+                if jetzt >= push_pull_delay:
+                    push_pull_delay = jetzt + 50   # + x Sekunden
+                    if float(device_data[0][5]) > 27:
+                        direction = direction + 1  # 1=Push, 0=Pull
+                        if direction > 1:
+                            direction = 0
+
+                # -----------------------
+                # Daten senden an Einheiten >20°C
+                # -----------------------
+                if float(device_data[0][5]) > 20:
+                    if direction == 1:
+                        dir_send = "1" if (i % 2 == 1) else "0"   # gerade=1, ungerade=0
+                    else:
+                        dir_send = "0" if (i % 2 == 1) else "1"   # gerade=0, ungerade=1
+                    send_to_device(HC05S[i], f"{cmd_write[6]}={dir_send}")
+
 
 def write_off(HC05S, cmd_write):
     """
     Schreibt die Lüfterstufe 0 an alle Geräte
     """
     for p in range(len(HC05S)):
-        fan_percent = 0
+        fan_percent = 1
         send_to_device(HC05S[p], f"{cmd_write[5]}={fan_percent}")
 
 # globale Variable für Zeit-Sync
@@ -353,7 +398,7 @@ def time_sync(HC05S, cmd_write):
     jetzt = time.time()
     uhrzeit = time.ctime(time.time())
 
-    if jetzt >= delay_time_send:  # Tag=Mon, Monat=Jan, Tag=01, Zeit=12:00:00, Jahr=2025 an die Einheiten gesendet
+    if jetzt >= delay_time_send:  # "day_name", "month", "day", "time", "year", an die Einheiten gesendet
         parts = uhrzeit.split()
         for p in range(len(HC05S)):
             for i in range(len(parts)):

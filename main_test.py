@@ -3,8 +3,10 @@
 #Eigene Imports
 
 import pasco2
-import funktion_db
+import database
 import hc05lib
+import weblib
+import raspisenslib
 
 #Fremde Imports
 
@@ -13,16 +15,14 @@ import time
 from adafruit_bme280 import basic as adafruit_bme280
 from smbus2 import SMBus
 import pathlib
-import json
-import os
 
 #FLASK Imports
 
-from flask import Flask, request, redirect, url_for
-import threading
+#from flask import Flask, request, redirect, url_for
+#import threading
 
 ##########################################################
-
+"""
 app = Flask(__name__)
 
 @app.route("/btn1")
@@ -56,7 +56,7 @@ def start_flask():
 
 #Flask-Server im Hintergrund starten
 threading.Thread(target=start_flask, daemon=True).start()
-
+"""
 ##########################################################
 
 # ------------------------------
@@ -96,62 +96,15 @@ OUT = pathlib.Path("/var/www/html/latest.json")
 bus = SMBus(1)
 i2c = board.I2C()                                   # für adafruit_bme280
 bme280 = adafruit_bme280.Adafruit_BME280_I2C(i2c)   # bme280 initialisierung
-bme280.sea_level_pressure = 1000                  # Sealevel
+bme280.sea_level_pressure = 900                     # Sealevel
 
 delay = 0
 delay_time_send = 0
 datasafedelay = 0
 
 co2 = pasco2.pasco2init()
-
-def write_json(d):
-    TMP.write_text(json.dumps(d, ensure_ascii=False))
-    os.replace(TMP, OUT)
+raspi_data = raspisenslib.raspi_readdata(bme280)
     
-old_raspi_data = [0, 0, 0, 0, 0]
-def raspi_readdata():
-    global old_raspi_data
-
-    # Starte mit den alten Werten
-    raspi_data = old_raspi_data.copy()
-
-    raspi_data[0] = pasco2.read_co2()
-    
-    try:
-        raspi_data[1] = bme280.temperature
-        raspi_data[2] = bme280.humidity
-        raspi_data[3] = bme280.pressure
-        raspi_data[4] = bme280.altitude
-    except OSError:
-        print("BME280 Fehler")
-
-    old_raspi_data = raspi_data.copy()
-    return raspi_data
-
-def build_web_payload(uhrzeit, raspi_data, device_data):
-    payload = {
-        "ts": uhrzeit,
-        "co2": raspi_data[0],
-        "t": raspi_data[1],
-        "h": raspi_data[2],
-        "p": raspi_data[3],
-    }
-
-    # Für jedes Gerät in der Liste device_data hinzufügen
-    for i, dev in enumerate(device_data, start=1):
-        payload.update({
-            f"device{i}": dev[0],
-            f"tempinnen{i}": dev[5],
-            f"huminnen{i}": dev[6],
-            f"tempaussen{i}": dev[7],
-            f"humaussen{i}": dev[8],
-            f"drehzahl{i}": dev[2],
-            f"periode{i}": dev[4],
-        })
-
-    return payload
-
-
 # ------------------------------
 # Hauptschleife
 # ------------------------------
@@ -161,7 +114,7 @@ try:
         uhrzeit = time.ctime(time.time())
         jetzt = time.time()
 
-        raspi_data = raspi_readdata()
+        raspi_data = raspisenslib.raspi_readdata(bme280)
 
         if jetzt >= delay:      
             delay = jetzt + 1   # + x Sekunden
@@ -174,11 +127,13 @@ try:
             # Sendet Laufrichtung an die Einheiten
             # Lüfterstufe an alle Geräte senden
             # 1 = Montag bis 5 = Freitag
-            if wochentag < 6:  
-                if 6 <= stunde < 18:
+            if wochentag < 7:  
+                if 6 <= stunde < 20:
                     hc05lib.writedata(HC05S, cmd_write, raspi_data, device_data)  
-                elif 4 <= stunde < 6:
-                    hc05lib.writedata(HC05S, cmd_write, raspi_data, device_data)  
+                elif 5 <= stunde < 6:
+                    stosslüften = raspi_data
+                    stosslüften[0] = 1000 # CO2 auf 1000 ppm setzen für Stosslüften
+                    hc05lib.writedata(HC05S, cmd_write, stosslüften, device_data)  
                 else:
                     hc05lib.write_off(HC05S, cmd_write)
             else:
@@ -201,13 +156,13 @@ try:
                 print(f"Periode:        {device_data[i][4]}\n")
 
             # Erstellt ein Dict und schreibt es in eine JSON Datei
-            data = build_web_payload(uhrzeit, raspi_data, device_data)
-            write_json(data)
+            data = weblib.build_web_payload(uhrzeit, raspi_data, device_data)
+            weblib.write_json(data, TMP, OUT)
             
             # Speichern in der DB
             datasafedelay = datasafedelay + 1 
-            if datasafedelay >= 1: # alle Sekunde
-                funktion_db.save_to_db(uhrzeit, raspi_data, device_data)
+            if datasafedelay >= 20: # alle 20 Sekunden speichern
+                database.save_to_db(uhrzeit, raspi_data, device_data)
                 datasafedelay = 0    
             
             # Schreibt je nach Intervall die Einheiten an um Daten zu lesesn

@@ -17,7 +17,13 @@
    padding: 30px;
    border-radius: 12px;
    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+   font-size: 1.5rem;
 }
+
+body {
+  font-weight: bold;
+}
+
 
 </style>
 
@@ -54,28 +60,28 @@
       
     <div class="col">
        <div class="container self">
-	     <div class="title"><span id="device1"></span></div>
+	     <div class="title">Einheit <span id="device1"></span></div>
 	     <div class="measurement">Temperatur Innen: <span id="tempinnen1"></span></div>
 	     <div class="measurement">Feuchte Innen: <span id="huminnen1"></span></div>
 	     <div class="measurement">Temperatur Aussen: <span id="tempaussen1"></span></div>
 	     <div class="measurement">Feuchte Aussen: <span id="humaussen1"></span></div>
 	     <div class="measurement">Drehzahl: <span id="drehzahl1"></span></div>
-	     <div class="measurement">Periode: <span id="periode1"></span></div>
+	     <div class="measurement">PWM: <span id="periode1"></span></div>
        </div>
       </div>
     
     <div class="col">
        <div class="container self">
-	     <div class="title"><span id="device2"></span></div>
+	     <div class="title">Einheit <span id="device2"></span></div>
 	     <div class="measurement">Temperatur Innen: <span id="tempinnen2"></span></div>
 	     <div class="measurement">Feuchte Innen: <span id="huminnen2"></span></div>
 	     <div class="measurement">Temperatur Aussen: <span id="tempaussen2"></span></div>
 	     <div class="measurement">Feuchte Aussen: <span id="humaussen2"></span></div>
 	     <div class="measurement">Drehzahl: <span id="drehzahl2"></span></div>
-	     <div class="measurement">Periode: <span id="periode2"></span></div>
+	     <div class="measurement">PWM: <span id="periode2"></span></div>
        </div>
       </div>
-      
+	<!--      
     <div class="col">
       <div class="container self">
 		<form action="http://raspberrypi.local:8000/sendtext" method="post">
@@ -88,7 +94,7 @@
     </div>
   </div>
 </div>
-
+-->
 	<script>
 	let startTime = Date.now();          //Startzeit merken
 	
