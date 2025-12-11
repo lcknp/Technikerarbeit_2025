@@ -1,4 +1,34 @@
-#  Luca Knapp
+# =============================================================================
+#  Projekt:      EBM-Papst Lüftungssteuerung – Technikerarbeit 2025
+#  Datei:        main.py
+#  Autor:        Luca Knapp
+#  Version:      1.0
+#  Datum:        2025
+#
+#  Beschreibung:
+#  ---------------------------------------------------------------------------
+#  Dieses Skript ist die zentrale Steuerungslogik für das gesamte Projekt.
+#  Es übernimmt folgende Hauptaufgaben:
+#
+#   • Bluetooth-Kommunikation mit zwei oder mehreren HC-05 basierten Sensoreinheiten
+#   • Einlesen von Temperatur, Luftfeuchte, CO2, Luftdruck (Raspberry + Sensoren)
+#   • Automatische Lüftersteuerung basierend auf Zeit, Wochentag und Sensorwerten
+#   • Schreiben von Live-Daten in eine JSON-Datei für die Weboberfläche
+#   • Speichern der Messwerte in einer SQL-Datenbank
+#   • Zeit-Synchronisation mit den Einheiten für zuverlässige Abläufe
+#
+#  Aufbau:
+#   - HC-05 Verbindung wird aufgebaut und verwaltet
+#   - BME280 und PASCO2 Sensoren werden initialisiert
+#   - Hauptschleife läuft sekundengenau
+#   - Daten werden verarbeitet, angezeigt und gespeichert
+#
+#  Lizenz:
+#   Dieses Projekt wurde im Rahmen der Technikerarbeit 2025/26 erstellt.
+#   Nutzung und Weitergabe nur mit Erlaubnis des Autors.
+#
+# =============================================================================
+
 
 #Eigene Imports
 
