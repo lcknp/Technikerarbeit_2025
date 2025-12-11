@@ -301,7 +301,7 @@ def writedata(HC05S, cmd_write, raspi_data, device_data):
         if raspi_data[0] < 400:
             fan_percent = 1
         elif 400 <= raspi_data[0] < 1200:
-            fan_percent = 20 + (raspi_data[0] - 400) * 0.0875
+            fan_percent = 35 + (raspi_data[0] - 400) * 0.06875
         else:
             fan_percent = 90
         send_to_device(HC05S[p], f"{cmd_write[5]}={fan_percent}")
@@ -316,12 +316,12 @@ def writedata(HC05S, cmd_write, raspi_data, device_data):
             if i == 0:
                 # --- MASTER ---
                 tM = float(device_data[0][7])
-                Schaltschwelle = raspi_data[1] - 3.0   # Schaltschwelle = Innentemp - 2°C
+                Schaltschwelle = 20
 
                 # Master entscheidet
                 if tM > Schaltschwelle:
                     master_cmd = "1"   # entladen
-                elif tM < 17.0:
+                elif tM < 16:
                     master_cmd = "0"   # aufladen
 
                 # an Master senden
@@ -353,31 +353,31 @@ def writedata(HC05S, cmd_write, raspi_data, device_data):
                 # Befehl an Slave senden
                 send_to_device(HC05S[i], f"{cmd_write[6]}={slave_cmd}")
 
-                # -----------------------
-                # Durchzug bei angenehmen Temperaturen
-                # -----------------------
-                if float(device_data[0][5]) > 20 and float(device_data[i][5]) < 27:
-                    direction = 0  # durchzug
+        # -----------------------
+        # Durchzug bei angenehmen Temperaturen
+        # -----------------------
+        if float(device_data[0][5]) > 20 and float(device_data[i][5]) < 27:
+            direction = 0  # durchzug
 
-                # -----------------------
-                # zu hohen Aussentemperaturen – kurze Zykluszeiten 
-                # -----------------------
-                if jetzt >= push_pull_delay:
-                    push_pull_delay = jetzt + 50   # + x Sekunden
-                    if float(device_data[0][5]) > 27:
-                        direction = direction + 1  # 1=Push, 0=Pull
-                        if direction > 1:
-                            direction = 0
+        # -----------------------
+        # zu hohen Aussentemperaturen – kurze Zykluszeiten 
+        # -----------------------
+        if float(device_data[0][5]) > 27:
+            if jetzt >= push_pull_delay:
+                push_pull_delay = jetzt + 50   # + x Sekunden
+                direction = direction + 1  # 1=Push, 0=Pull
+                if direction > 1:
+                    direction = 0
 
-                # -----------------------
-                # Daten senden an Einheiten >20°C
-                # -----------------------
-                if float(device_data[0][5]) > 20:
-                    if direction == 1:
-                        dir_send = "1" if (i % 2 == 1) else "0"   # gerade=1, ungerade=0
-                    else:
-                        dir_send = "0" if (i % 2 == 1) else "1"   # gerade=0, ungerade=1
-                    send_to_device(HC05S[i], f"{cmd_write[6]}={dir_send}")
+        # -----------------------
+        # Daten senden an Einheiten >20°C
+        # -----------------------
+        if float(device_data[0][5]) > 20:
+            if direction == 0:
+                dir_send = "1" if (i % 2 == 1) else "0"   # gerade=1, ungerade=0
+            else:
+                dir_send = "0" if (i % 2 == 1) else "1"   # gerade=0, ungerade=1
+            send_to_device(HC05S[i], f"{cmd_write[6]}={dir_send}")
 
 
 def write_off(HC05S, cmd_write):

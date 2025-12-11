@@ -31,31 +31,6 @@ def btn1():
     return redirect("http://raspberrypi.local/Monitoring_V2.html")
 
 @app.route("/btn2")
-def btn2():
-    print("Button 2 gedrückt")
-    return redirect("http://raspberrypi.local/Monitoring_V2.html")
-
-@app.route("/sendtext", methods=["POST"])
-def sendtext():
-    msg = request.form.get("msg", "")
-    print("Empfangen:", msg)
-    if msg.startswith("E1"):
-        parts = msg.split()
-        if(parts[1].isdigit()):
-            hc05lib.send_to_device(HC05S[0], parts[1])
-            print(f"Gesendet an Einheit 1: {parts[1]}")
-    elif msg.startswith("E2"):
-        parts = msg.split()
-        if(parts[1].isdigit()):
-            hc05lib.send_to_device(HC05S[1], parts[1])
-            print(f"Gesendet an Einheit 2: {parts[1]}")
-    return redirect("http://raspberrypi.local/Monitoring_V2.html")
-
-def start_flask():
-    app.run(host="0.0.0.0", port=8000, debug=False, threaded=True)
-
-#Flask-Server im Hintergrund starten
-threading.Thread(target=start_flask, daemon=True).start()
 """
 ##########################################################
 
