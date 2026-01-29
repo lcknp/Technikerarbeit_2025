@@ -1,11 +1,26 @@
+# =============================================================================
+#  Projekt:      EBM-Papst Lüftungssteuerung – Technikerarbeit 2025/26
+#  Datei:        raspisenslib.py
+#  Autor:        Luca Knapp
+#  Version:      1.0
+#  Datum:        2025
 #
+#  Beschreibung:
+#  ---------------------------------------------------------------------------
+#  Funktionen zum Auslesen der Raspberry Pi Sensorwerte (BME280 + PASCO2).
+#  Speichert bei I2C-Fehlern die letzten gültigen Werte und gibt diese zurück.
 #
+#  Lizenz:
+#   Dieses Projekt wurde im Rahmen der Technikerarbeit 2025/26 erstellt.
+#   Nutzung und Weitergabe nur mit Erlaubnis des Autors.
+#
+# =============================================================================
 
-from smbus2 import SMBus
-from adafruit_bme280 import basic as adafruit_bme280
 import pasco2
 
 old_raspi_data = [0, 0, 0, 0, 0]
+
+
 def raspi_readdata(bme280):
     global old_raspi_data
 
@@ -13,7 +28,7 @@ def raspi_readdata(bme280):
     raspi_data = old_raspi_data.copy()
 
     raspi_data[0] = pasco2.read_co2()
-    
+
     try:
         raspi_data[1] = bme280.temperature
         raspi_data[2] = bme280.humidity
