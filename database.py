@@ -82,7 +82,7 @@ def databasesafe(
     # Verbindung zur DB öffnen
     db = pymysql.connect(
         host="localhost",
-        user="luca",
+        user="ebmuser",
         password="12345678",
         database="data",
         autocommit=True,

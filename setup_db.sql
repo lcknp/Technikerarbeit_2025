@@ -1,0 +1,9 @@
+CREATE DATABASE IF NOT EXISTS data
+CHARACTER SET utf8mb4
+COLLATE utf8mb4_unicode_ci;
+
+CREATE USER IF NOT EXISTS 'ebmuser'@'localhost'
+IDENTIFIED BY '12345678';
+
+GRANT ALL PRIVILEGES ON data.* TO 'ebmuser'@'localhost';
+FLUSH PRIVILEGES;
