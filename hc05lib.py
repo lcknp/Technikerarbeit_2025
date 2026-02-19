@@ -39,7 +39,7 @@ RETRY_DELAY_S = 2.0  # Wartezeit zwischen Verbindungs-Versuchen
 READ_TIMEOUT_S = 0.10  # kurzer Lese-Timeout pro recv()
 
 # ---- Globale Variablen ----
-push_pull_delay = 0.0  # für >20°C-Parität
+push_pull_delay = 0.0
 direction = 0
 master_cmd = "0"  # 0=aufladen, 1=entladen (Startzustand)
 prev_master_cmd: str | None = None
@@ -116,7 +116,7 @@ def _conn_loop() -> None:
             # Schon verbunden?
             if mac in connected_devices:
                 continue
-            # Schon am Verbinden (Holt mit der Mak aus dem Dict True/False)
+            # Schon am Verbinden (Holt mit der Mac aus dem Dict True/False)
             if connecting.get(mac):
                 continue
 
@@ -202,7 +202,7 @@ def send_to_device(mac_address: str, msg: str) -> None:
         # print(f"Gesendet an {mac_address}: {msg.strip()}")
     except bluetooth.btcommon.BluetoothError as e:
         print(f"Sende-Fehler an {mac_address}: {e}")
-        # Verbindung als „tot“ markieren; Daemon verbindet neu
+        # Verbindung als tot markieren; Daemon verbindet neu
         try:
             sock.close()
         except Exception:
@@ -241,7 +241,7 @@ def _read_from_device(mac_address: str, timeout: float = READ_TIMEOUT_S) -> str 
         while True:
             chunk = sock.recv(1)  # liest Byte für Byte
             if not chunk:
-                # Gegenstelle hat sauber geschlossen -> als echter Fehler behandeln
+                # Gegenstelle hat sauber geschlossen
                 raise bluetooth.btcommon.BluetoothError("peer closed")
             if chunk == b"\n":  # Ende der Zeile
                 return data.decode("utf-8", errors="ignore").strip()
@@ -250,11 +250,9 @@ def _read_from_device(mac_address: str, timeout: float = READ_TIMEOUT_S) -> str 
     except bluetooth.btcommon.BluetoothError as e:
         s = str(e).lower()
 
-        # Wenn einfach nichts kam -> KEIN harter Fehler, nur None zurückgeben
         if "timed out" in s or "timeout" in s or "would block" in s:
             return None
 
-        # andere Fehler -> Verbindung wirklich gestört -> reconnecten lassen
         try:
             sock.close()
         except Exception:
@@ -265,7 +263,6 @@ def _read_from_device(mac_address: str, timeout: float = READ_TIMEOUT_S) -> str 
 
     except Exception:
         # Unbekannter Fehler -> Verbindung als tot markieren
-        # (z. B. OSError von darunterliegenden Schichten)
         try:
             sock.close()
         except Exception:
@@ -294,7 +291,7 @@ def readdata(hc05s: list[str], cmd_read: list[str], _cmd_write: list[str], devic
             while time.time() < t_end:
                 m = _read_from_device(hc05s[z], timeout=0.05)
                 if not m:
-                    # in diesem Mini-Fenster kam gerade nichts -> weiter sammeln
+                    # in diesem Mini-Fenster kam gerade nichts, weiter sammeln
                     continue
                 for y, key in enumerate(cmd_read):
                     if m.startswith(key):
@@ -323,7 +320,7 @@ def writedata(hc05s: list[str], cmd_write: list[str], raspi_data, device_data) -
 
     jetzt = time.time()
 
-    # --- Lüfterleistung nach CO2 ´ ---
+    # --- Lüfterleistung nach CO2  ---
     for p in range(len(hc05s)):
         if raspi_data[0] < 400:
             fan_percent = 1
