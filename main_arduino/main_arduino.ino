@@ -1,8 +1,25 @@
 /******************************************************************************
- * Lüftungssteuerung V3.0
- * Author: Luca Knapp
- * Technikerarbeit FTS 2025/26
+*  Projekt:      EBM-Papst Lüftungssteuerung – Technikerarbeit 2025/26
+*  Datei:        main_arduino.ino
+*  Autor:        Luca Knapp
+*  Version:      3.0
+*  Datum:        2025
+*
+*  Beschreibung:
+*  ---------------------------------------------------------------------------
+*  Dieses Projekt implementiert eine Lüftungssteuerung auf einem Arduino, die
+*  mit einem Raspberry Pi kommuniziert. Es werden Sensorwerte von DHT22-Sensoren
+*  erfasst, die Zeit über eine RTC verwaltet und die Lüftergeschwindigkeit basierend
+*  auf den Sensorwerten und Befehlen vom Raspberry Pi gesteuert. Das Projekt
+*  ist in zwei Modi konfigurierbar: bedarfsorientiert (Mode 0) und Automatik mit
+*  (Mode 1).
+*
+*  Lizenz:
+*   Dieses Projekt wurde im Rahmen der Technikerarbeit 2025/26 erstellt.
+*   Nutzung und Weitergabe nur mit Erlaubnis des Autors.
+*
 *******************************************************************************/
+
 
 #include <Arduino.h>
 #include <string.h>
@@ -19,7 +36,7 @@
 // -------------------- Hardware-Objekte --------------------
 RTC_DS1307 rtc;                 // RTC-Modul
 
-DHT dht1(DHT_Innen, DHT22);     // außen/innen kannst du bei Bedarf tauschen
+DHT dht1(DHT_Innen, DHT22);
 DHT dht2(DHT_Aussen, DHT22);
 
 // -------------------- eigene Module --------------------
