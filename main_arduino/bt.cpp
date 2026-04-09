@@ -1,3 +1,18 @@
+// =============================================================================
+//  Projekt:      EBM-Papst Lüftungssteuerung – Technikerarbeit 2025/26
+//  Datei:        bt.cpp
+//  Autor:        Luca Knapp
+//  Version:      1.0
+//  Datum:        2025
+//
+//  Beschreibung: Implementierung der Bluetooth-Kommunikation (HC-05)
+//
+//  Lizenz:
+//   Dieses Projekt wurde im Rahmen der Technikerarbeit 2025/26 erstellt.
+//   Nutzung und Weitergabe nur mit Erlaubnis des Autors.
+//
+// =============================================================================
+
 #include "bt.h"
 #include <Arduino.h>
 #include <string.h>

@@ -1,3 +1,19 @@
+// =============================================================================
+//  Projekt:      EBM-Papst Lüftungssteuerung – Technikerarbeit 2025/26
+//  Datei:        luefter_ansteuerung.cpp
+//  Autor:        Luca Knapp
+//  Version:      1.0
+//  Datum:        2025
+//
+//  Beschreibung: Implementierung der Lüfteransteuerung (PWM, Push/Pull,
+//                Automatikbetrieb)
+//
+//  Lizenz:
+//   Dieses Projekt wurde im Rahmen der Technikerarbeit 2025/26 erstellt.
+//   Nutzung und Weitergabe nur mit Erlaubnis des Autors.
+//
+// =============================================================================
+
 #include "luefter_ansteuerung.h"
 #include <Arduino.h>
 #include "RTClib.h"

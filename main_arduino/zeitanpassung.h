@@ -1,3 +1,18 @@
+// =============================================================================
+//  Projekt:      EBM-Papst Lüftungssteuerung – Technikerarbeit 2025/26
+//  Datei:        zeitanpassung.h
+//  Autor:        Luca Knapp
+//  Version:      1.0
+//  Datum:        2025
+//
+//  Beschreibung: Header – Zeitsynchronisation mit dem Raspberry Pi
+//
+//  Lizenz:
+//   Dieses Projekt wurde im Rahmen der Technikerarbeit 2025/26 erstellt.
+//   Nutzung und Weitergabe nur mit Erlaubnis des Autors.
+//
+// =============================================================================
+
 #ifndef ZEITANPASSUNG_H
 #define ZEITANPASSUNG_H
 
