@@ -131,7 +131,7 @@ try:
             # Lüfterstufe an alle Geräte senden
             # 1 = Montag bis 5 = Freitag
             if wochentag < 7:
-                if 6 <= stunde < 20:
+                if 6 <= stunde < 23:
                     hc05lib.writedata(
                         HC05S, CMD_WRITE, raspi_data, device_data
                     )

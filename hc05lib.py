@@ -305,100 +305,185 @@ def readdata(hc05s: list[str], cmd_read: list[str], _cmd_write: list[str], devic
                             )
     return device_data
 
+# --- Parameter ---
+IDX_WT_INNEN    = 7
+IDX_WT_AUSSEN   = 5
 
-def writedata(hc05s: list[str], cmd_write: list[str], raspi_data, device_data) -> None:
-    """
-    Enscheidet wie hoch die Lüfterstufe ist und
-    Schreibt die Lüfterstufe an alle Geräte
-    Steuert auch die Laufrichtung
-    """
-    global push_pull_delay, direction, master_cmd, prev_master_cmd, delayed_until
+TEMP_TOLERANZ        = 3.0  # Kelvin, Umschaltkriterium WT-Sensorangleich
+MAXIMALLAUF_SEK      = 300  # Sicherheits-Fallback
+MINDESTLAUF_SEK      = 120  # Mindestlaufzeit nach Richtungswechsel
+NACHLAUF_FAKTOR      = 20   # Sekunden pro Kelvin Niveau-Differenz
 
-    # sicherstellen, dass delayed_until zur Anzahl passt
-    if len(delayed_until) != len(hc05s):
-        delayed_until = [0.0] * len(hc05s)
+# --- Globale Variablen ---
+betriebsart            = "durchzug"
+master_cmd             = "0"
+prev_cmd               = None
+timeout                = 0.0
+mindestlauf_bis        = 0.0
+
+# Master-Spitzenwert
+peak_master            = None
+
+# Slave-spezifische Zustände als Dictionaries (Key = Slave-Index in hc05s)
+peak_slave             = {}   # {index: peak_temp}
+gleichphasig           = {}   # {index: bool}
+nachlauf_aktiv         = {}   # {index: bool}
+nachlauf_bis           = {}   # {index: zeitstempel}
+nachlauf_dauer_pending = {}   # {index: dauer_sek}
+
+
+def writedata(hc05s, cmd_write, raspi_data, device_data):
+    global betriebsart, master_cmd, prev_cmd, timeout
+    global mindestlauf_bis
+    global peak_master, peak_slave
+    global gleichphasig, nachlauf_aktiv, nachlauf_bis, nachlauf_dauer_pending
 
     jetzt = time.time()
 
-    # --- Lüfterleistung nach CO2  ---
+    t_wt_innen  = float(device_data[0][IDX_WT_INNEN])
+    t_wt_aussen = float(device_data[0][IDX_WT_AUSSEN])
+
+    # -----------------------
+    # Slave-Zustände initialisieren (beim ersten Aufruf)
+    # -----------------------
+    for i in range(1, len(hc05s)):
+        if i not in peak_slave:
+            peak_slave[i]             = None
+            gleichphasig[i]           = False
+            nachlauf_aktiv[i]         = False
+            nachlauf_bis[i]           = 0.0
+            nachlauf_dauer_pending[i] = 0.0
+
+    # -----------------------
+    # Lüfterstufe nach CO2
+    # -----------------------
+    if raspi_data[0] < 400:
+        fan_percent = 1
+    elif 400 <= raspi_data[0] < 1200:
+        fan_percent = 35 + (raspi_data[0] - 400) * 0.06875
+    else:
+        fan_percent = 90
+
     for p in range(len(hc05s)):
-        if raspi_data[0] < 400:
-            fan_percent = 1
-        elif 400 <= raspi_data[0] < 1200:
-            fan_percent = 35 + (raspi_data[0] - 400) * 0.06875
-        else:
-            fan_percent = 90
         send_to_device(hc05s[p], f"{cmd_write[5]}={fan_percent}")
 
-    for i in range(len(hc05s)):
+    # -----------------------
+    # Zeitflags
+    # -----------------------
+    mindestlauf_vorbei = (prev_cmd is None) or (jetzt >= mindestlauf_bis)
+
+    # -----------------------
+    # Betriebsart-Erkennung über Außentemperatur
+    # Nur prüfen wenn Master auflädt
+    # -----------------------
+    if mindestlauf_vorbei and master_cmd == "0":
+        if betriebsart == "push_pull":
+            if t_wt_aussen >= 23:
+                betriebsart = "durchzug"
+        elif betriebsart == "durchzug":
+            if t_wt_aussen < 20:
+                betriebsart = "push_pull"
+
+    # -----------------------
+    # PUSH-PULL
+    # -----------------------
+    if betriebsart == "push_pull":
+
         # -----------------------
-        # Push-Pull Steuerung ( < 20°C: Wärmerückgewinnung + Nachlauf )
+        # LADEN (master_cmd == "0")
         # -----------------------
-        if float(device_data[0][5]) < 20:  # Außentemperatur kleiner als 20
-            schaltschwelle = 20
+        if master_cmd == "0":
 
-            if i == 0:
-                # --- MASTER ---
-                t_m = float(device_data[0][7])
+            # Master-Spitzenwert mitführen
+            if peak_master is None or t_wt_innen > peak_master:
+                peak_master = t_wt_innen
 
-                # Master entscheidet
-                if t_m > schaltschwelle:
-                    master_cmd = "1"  # entladen
-                elif t_m < 16:
-                    master_cmd = "0"  # aufladen
+            # Für jeden Slave individuell: Spitzenwert, Nachlauf, Gleichphasig
+            for i in range(1, len(hc05s)):
+                t_slave = float(device_data[i][IDX_WT_INNEN])
 
-                # an Master senden
-                send_to_device(hc05s[0], f"{cmd_write[6]}={master_cmd}")
+                # Slave-Spitzenwert mitführen
+                if peak_slave[i] is None or t_slave > peak_slave[i]:
+                    peak_slave[i] = t_slave
 
-                # Richtungswechsel -> Nachlaufzeit für alle Slaves starten
-                if (prev_master_cmd is None) or (master_cmd != prev_master_cmd):
-                    for j in range(1, len(hc05s)):
-                        delayed_until[j] = jetzt + 120
-                    prev_master_cmd = master_cmd
+                # Nachlauf ablaufen lassen
+                if nachlauf_aktiv[i] and jetzt >= nachlauf_bis[i]:
+                    nachlauf_aktiv[i] = False
 
+                # Gleichphasig direkt an Nachlauf gekoppelt
+                gleichphasig[i] = nachlauf_aktiv[i]
+
+        # -----------------------
+        # ENTLADEN (master_cmd == "1")
+        # -----------------------
+        if master_cmd == "1":
+            for i in range(1, len(hc05s)):
+                gleichphasig[i] = False
+
+        # -----------------------
+        # Umschaltbedingung prüfen (nur Master)
+        # -----------------------
+        differenz   = abs(t_wt_innen - t_wt_aussen)
+        angeglichen = differenz <= TEMP_TOLERANZ
+        fallback    = prev_cmd is not None and jetzt >= timeout
+
+        # -----------------------
+        # Master umschalten
+        # -----------------------
+        alte_master_cmd = master_cmd
+        if mindestlauf_vorbei and (angeglichen or fallback):
+            master_cmd = "0" if master_cmd == "1" else "1"
+
+        send_to_device(hc05s[0], f"{cmd_write[6]}={master_cmd}")
+
+        if master_cmd != alte_master_cmd:
+            timeout         = jetzt + MAXIMALLAUF_SEK
+            mindestlauf_bis = jetzt + MINDESTLAUF_SEK
+            prev_cmd        = master_cmd
+
+            # Wechsel von Laden -> Entladen:
+            # Für jeden Slave Nachlaufdauer aus individueller Spitzen-Differenz berechnen
+            if master_cmd == "1" and peak_master is not None:
+                for i in range(1, len(hc05s)):
+                    if peak_slave[i] is not None:
+                        niveau_diff_ende = peak_master - peak_slave[i]
+                        if niveau_diff_ende > 0:
+                            nachlauf_dauer_pending[i] = niveau_diff_ende * NACHLAUF_FAKTOR
+                        else:
+                            nachlauf_dauer_pending[i] = 0.0
+
+            # Wechsel von Entladen -> Laden:
+            # Peaks resetten, Nachlauf für jeden Slave individuell aktivieren
+            if master_cmd == "0":
+                peak_master = None
+                for i in range(1, len(hc05s)):
+                    peak_slave[i] = None
+
+                    if nachlauf_dauer_pending[i] > 0:
+                        nachlauf_bis[i]           = jetzt + nachlauf_dauer_pending[i]
+                        nachlauf_aktiv[i]         = True
+                        nachlauf_dauer_pending[i] = 0.0
+
+        # -----------------------
+        # Slave-Befehle senden
+        # Jeder Slave wird individuell gesteuert
+        # Gleichphasig: Slave läuft in gleicher Richtung wie Master
+        # Normal:       Slave läuft gegenphasig
+        # -----------------------
+        for i in range(1, len(hc05s)):
+            if gleichphasig[i]:
+                slave_cmd = master_cmd
             else:
-                # --- SLAVES ---
-                t_s = float(device_data[i][7])
-
-                # Standard: Gegenphase zum Master
                 slave_cmd = "0" if master_cmd == "1" else "1"
+            send_to_device(hc05s[i], f"{cmd_write[6]}={slave_cmd}")
 
-                # Nachlauf: weiter aufladen (0), solange Nachlaufzeit aktiv UND Schwelle nicht erreicht
-                if (t_s < schaltschwelle) and (jetzt < delayed_until[i]):
-                    slave_cmd = "0"
-                else:
-                    # Sobald Schwelle erreicht oder Nachlauf vorbei -> Nachlauf beenden
-                    delayed_until[i] = 0.0
-
-                # Befehl an Slave senden
-                send_to_device(hc05s[i], f"{cmd_write[6]}={slave_cmd}")
-
-        # -----------------------
-        # Durchzug bei angenehmen Temperaturen
-        # -----------------------
-        if float(device_data[0][5]) > 20 and float(device_data[i][5]) < 27:
-            direction = 0  # durchzug
-
-        # -----------------------
-        # zu hohen Aussentemperaturen – kurze Zykluszeiten
-        # -----------------------
-        if float(device_data[0][5]) > 27:
-            if jetzt >= push_pull_delay:
-                push_pull_delay = jetzt + 50  # + x Sekunden
-                direction += 1  # 1=Push, 0=Pull
-                if direction > 1:
-                    direction = 0
-
-        # -----------------------
-        # Daten senden an Einheiten >20°C
-        # -----------------------
-        if float(device_data[0][5]) > 20:
-            if direction == 0:
-                dir_send = "1" if (i % 2 == 1) else "0"  # gerade=1, ungerade=0
-            else:
-                dir_send = "0" if (i % 2 == 1) else "1"  # gerade=0, ungerade=1
+    # -----------------------
+    # DURCHZUG (>= 23 °C Außentemperatur)
+    # -----------------------
+    else:
+        for i in range(len(hc05s)):
+            dir_send = "1" if (i % 2 == 0) else "0"
             send_to_device(hc05s[i], f"{cmd_write[6]}={dir_send}")
-
 
 def write_off(hc05s: list[str], cmd_write: list[str]) -> None:
     """
