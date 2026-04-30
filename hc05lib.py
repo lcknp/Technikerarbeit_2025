@@ -321,10 +321,13 @@ prev_cmd               = None
 timeout                = 0.0
 mindestlauf_bis        = 0.0
 
-# Master-Spitzenwert
+# Master-Spitzenwert (Index 0)
 peak_master            = None
 
-# Slave-spezifische Zustände als Dictionaries (Key = Slave-Index in hc05s)
+# Spitzenwerte der geraden Einheiten (Index 2, 4, ...) - laufen gleichphasig zum Master
+peak_even              = {}   # {index: peak_temp}
+
+# Slave-Zustände der ungeraden Einheiten (Index 1, 3, ...) - mit Nachlauf-Logik
 peak_slave             = {}   # {index: peak_temp}
 gleichphasig           = {}   # {index: bool}
 nachlauf_aktiv         = {}   # {index: bool}
@@ -335,7 +338,7 @@ nachlauf_dauer_pending = {}   # {index: dauer_sek}
 def writedata(hc05s, cmd_write, raspi_data, device_data):
     global betriebsart, master_cmd, prev_cmd, timeout
     global mindestlauf_bis
-    global peak_master, peak_slave
+    global peak_master, peak_even, peak_slave
     global gleichphasig, nachlauf_aktiv, nachlauf_bis, nachlauf_dauer_pending
 
     jetzt = time.time()
@@ -344,15 +347,21 @@ def writedata(hc05s, cmd_write, raspi_data, device_data):
     t_wt_aussen = float(device_data[0][IDX_WT_AUSSEN])
 
     # -----------------------
-    # Slave-Zustände initialisieren (beim ersten Aufruf)
+    # Zustände für neue Einheiten initialisieren
+    # Gerade Indizes (2, 4, ...) = Master-Gruppe
+    # Ungerade Indizes (1, 3, ...) = Slaves mit Nachlauf-Logik
     # -----------------------
     for i in range(1, len(hc05s)):
-        if i not in peak_slave:
-            peak_slave[i]             = None
-            gleichphasig[i]           = False
-            nachlauf_aktiv[i]         = False
-            nachlauf_bis[i]           = 0.0
-            nachlauf_dauer_pending[i] = 0.0
+        if i % 2 == 0:
+            if i not in peak_even:
+                peak_even[i] = None
+        else:
+            if i not in peak_slave:
+                peak_slave[i]             = None
+                gleichphasig[i]           = False
+                nachlauf_aktiv[i]         = False
+                nachlauf_bis[i]           = 0.0
+                nachlauf_dauer_pending[i] = 0.0
 
     # -----------------------
     # Lüfterstufe nach CO2
@@ -398,26 +407,30 @@ def writedata(hc05s, cmd_write, raspi_data, device_data):
             if peak_master is None or t_wt_innen > peak_master:
                 peak_master = t_wt_innen
 
-            # Für jeden Slave individuell: Spitzenwert, Nachlauf, Gleichphasig
-            for i in range(1, len(hc05s)):
+            # Spitzenwerte der geraden Einheiten mitführen (nur Monitoring)
+            for i in range(2, len(hc05s), 2):
+                t_even = float(device_data[i][IDX_WT_INNEN])
+                if peak_even[i] is None or t_even > peak_even[i]:
+                    peak_even[i] = t_even
+
+            # Für jeden Slave (ungerade Indizes) individuell:
+            # Spitzenwert, Nachlauf, Gleichphasig
+            for i in range(1, len(hc05s), 2):
                 t_slave = float(device_data[i][IDX_WT_INNEN])
 
-                # Slave-Spitzenwert mitführen
                 if peak_slave[i] is None or t_slave > peak_slave[i]:
                     peak_slave[i] = t_slave
 
-                # Nachlauf ablaufen lassen
                 if nachlauf_aktiv[i] and jetzt >= nachlauf_bis[i]:
                     nachlauf_aktiv[i] = False
 
-                # Gleichphasig direkt an Nachlauf gekoppelt
                 gleichphasig[i] = nachlauf_aktiv[i]
 
         # -----------------------
         # ENTLADEN (master_cmd == "1")
         # -----------------------
         if master_cmd == "1":
-            for i in range(1, len(hc05s)):
+            for i in range(1, len(hc05s), 2):
                 gleichphasig[i] = False
 
         # -----------------------
@@ -442,9 +455,9 @@ def writedata(hc05s, cmd_write, raspi_data, device_data):
             prev_cmd        = master_cmd
 
             # Wechsel von Laden -> Entladen:
-            # Für jeden Slave Nachlaufdauer aus individueller Spitzen-Differenz berechnen
+            # Nachlaufdauer für jeden Slave (ungerade Indizes) berechnen
             if master_cmd == "1" and peak_master is not None:
-                for i in range(1, len(hc05s)):
+                for i in range(1, len(hc05s), 2):
                     if peak_slave[i] is not None:
                         niveau_diff_ende = peak_master - peak_slave[i]
                         if niveau_diff_ende > 0:
@@ -453,29 +466,34 @@ def writedata(hc05s, cmd_write, raspi_data, device_data):
                             nachlauf_dauer_pending[i] = 0.0
 
             # Wechsel von Entladen -> Laden:
-            # Peaks resetten, Nachlauf für jeden Slave individuell aktivieren
+            # Alle Peaks resetten, Nachlauf je Slave aktivieren
             if master_cmd == "0":
                 peak_master = None
-                for i in range(1, len(hc05s)):
+                for i in range(2, len(hc05s), 2):
+                    peak_even[i] = None
+                for i in range(1, len(hc05s), 2):
                     peak_slave[i] = None
-
                     if nachlauf_dauer_pending[i] > 0:
                         nachlauf_bis[i]           = jetzt + nachlauf_dauer_pending[i]
                         nachlauf_aktiv[i]         = True
                         nachlauf_dauer_pending[i] = 0.0
 
         # -----------------------
-        # Slave-Befehle senden
-        # Jeder Slave wird individuell gesteuert
-        # Gleichphasig: Slave läuft in gleicher Richtung wie Master
-        # Normal:       Slave läuft gegenphasig
+        # Befehle an Einheiten senden
+        # Gerade Indizes (2, 4, ...): immer gleichphasig zum Master
+        # Ungerade Indizes (1, 3, ...): gegenphasig oder gleichphasig je nach Nachlauf
         # -----------------------
         for i in range(1, len(hc05s)):
-            if gleichphasig[i]:
-                slave_cmd = master_cmd
+            if i % 2 == 0:
+                # Master-Gruppe: folgt dem Master direkt
+                cmd = master_cmd
             else:
-                slave_cmd = "0" if master_cmd == "1" else "1"
-            send_to_device(hc05s[i], f"{cmd_write[6]}={slave_cmd}")
+                # Slave mit Nachlauf-Logik
+                if gleichphasig[i]:
+                    cmd = master_cmd
+                else:
+                    cmd = "0" if master_cmd == "1" else "1"
+            send_to_device(hc05s[i], f"{cmd_write[6]}={cmd}")
 
     # -----------------------
     # DURCHZUG (>= 23 °C Außentemperatur)
@@ -484,6 +502,7 @@ def writedata(hc05s, cmd_write, raspi_data, device_data):
         for i in range(len(hc05s)):
             dir_send = "1" if (i % 2 == 0) else "0"
             send_to_device(hc05s[i], f"{cmd_write[6]}={dir_send}")
+
 
 def write_off(hc05s: list[str], cmd_write: list[str]) -> None:
     """
