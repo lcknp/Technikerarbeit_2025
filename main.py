@@ -49,10 +49,10 @@ import weblib
 HC05S = [
     "98:D3:C1:FE:93:89",  # HC-05 Einheit 1
     "98:D3:11:FD:6B:9F",  # HC-05 Einheit 2
-    "98:D3:51:FE:B4:D0", # HC-05 Test HC05
-    "98:D3:B1:FE:32:2B", # HC-05 Test HC05
-    "98:D3:91:FE:BB:8E"  # HC-05 Test HC05
-    "98:D3:71:FE:EE:B7"
+    "98:D3:51:FE:B4:D0",  # HC-05 Einheit 3
+    "98:D3:B1:FE:32:2B",  # HC-05 Einheit 4
+    "98:D3:91:FE:BB:8E",  # HC-05 Einheit 5
+    "98:D3:71:FE:EE:B7"   # HC-05 Einheit 6
 ]
 
 # Anzahl der Datenpunkte pro Gerät (z. B. Sensorwerte)
