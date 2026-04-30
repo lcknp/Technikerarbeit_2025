@@ -31,7 +31,7 @@ def raspi_readdata(bme280):
 
     try:
         raspi_data[1] = bme280.temperature
-        raspi_data[1] = raspi_data[1] - 7  # Korrekturwert für die Temperatur
+        raspi_data[1] = raspi_data[1] - 10  # Korrekturwert für die Temperatur
         raspi_data[2] = bme280.humidity
         raspi_data[3] = bme280.pressure
         raspi_data[4] = bme280.altitude
